@@ -1,0 +1,80 @@
+# OpenTofu / Terraform state files
+terraform.tfstate
+terraform.tfstate.backup
+tofu.tfstate
+tofu.tfstate.backup
+*.tfstate
+*.tfstate.backup
+
+# OpenTofu / Terraform directories
+.terraform/
+.terraform.lock.hcl
+.opentofu/
+.opentofu.lock.hcl
+
+# Local kubeconfig
+kubeconfig
+kubeconfig.*
+kubeconfig-multi
+
+# Generated files (cloud-init, kubeconfigs, join scripts)
+generated/*
+!generated/.gitkeep
+
+# Log files
+*.log
+*.out
+*.err
+
+# Shell script cache/output
+shell/*.log
+
+# Cloud-init
+init/*.log
+
+# macOS system files
+.DS_Store
+
+# Zip backups or generated files
+*.zip
+
+# Secrets (example)
+secrets.env
+.env
+.env.*
+
+# Credentials (SECURITY: Never commit)
+.credentials.env
+**/vault-root-token
+**/vault-init.json
+**/*.secret
+**/.credentials
+
+# IDE / editor files
+.vscode/
+.idea/*
+*.swp
+*.swo
+
+#join shell
+./shell/join-controlplane.sh
+./shell/join.sh
+# SubOrchestrator - Auto-generated entries
+.orchestrator/checkpoints/
+.orchestrator/conversations/
+.orchestrator/logs/
+.orchestrator/*.jsonl
+.orchestrator/sessions.db
+.orchestrator/approvals/
+.worktrees/
+.env.local
+.orchestrator/**
+.claude/**
+
+# OpenTofu / Terraform plan files
+tfplan
+tfplan.out
+*.tfplan
+*.backup
+tofu.plan
+*.tofuplan
