@@ -78,3 +78,5 @@ tfplan.out
 *.backup
 tofu.plan
 *.tofuplan
+
+*.claude/**
