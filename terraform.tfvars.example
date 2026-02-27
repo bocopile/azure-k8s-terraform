@@ -1,0 +1,27 @@
+# ============================================================
+# terraform.tfvars.example
+# Copy to terraform.tfvars and fill in your values.
+# DO NOT commit terraform.tfvars (it may contain sensitive data).
+# ============================================================
+
+# Azure Subscription & Tenant
+subscription_id = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+tenant_id       = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+
+# Azure Container Registry name (globally unique, alphanumeric, 5-50 chars)
+acr_name = "acryk8sdemo12345"
+
+# Key Vault suffix for global uniqueness (3-8 alphanumeric chars)
+kv_suffix = "abc123"
+
+# Jump VM SSH access
+jumpbox_admin_username = "azureadmin"
+jumpbox_ssh_public_key = "ssh-rsa AAAA... your-public-key-here"
+
+# Resource tags
+tags = {
+  project     = "azure-k8s-demo"
+  environment = "demo"
+  managed_by  = "opentofu"
+  owner       = "your-name"
+}
