@@ -42,3 +42,8 @@ output "nsg_aks_ids" {
   description = "AKS NSG resource IDs by VNet key"
   value       = { for k, v in azurerm_network_security_group.aks : k => v.id }
 }
+
+output "aks_private_dns_zone_id" {
+  description = "AKS Private Cluster shared DNS Zone ID"
+  value       = azurerm_private_dns_zone.aks.id
+}

@@ -287,6 +287,29 @@ locals {
   }
 }
 
+# ============================================================
+# Private DNS Zone — AKS Private Cluster API Server
+# 공유 DNS Zone을 모든 VNet에 링크하여 Jump VM에서
+# 전체 클러스터 API Server FQDN 해석 가능
+# ============================================================
+
+resource "azurerm_private_dns_zone" "aks" {
+  name                = "privatelink.${var.location}.azmk8s.io"
+  resource_group_name = azurerm_resource_group.common.name
+  tags                = var.tags
+}
+
+resource "azurerm_private_dns_zone_virtual_network_link" "aks" {
+  for_each = var.vnets
+
+  name                  = "dnslink-aks-${each.key}"
+  resource_group_name   = azurerm_resource_group.common.name
+  private_dns_zone_name = azurerm_private_dns_zone.aks.name
+  virtual_network_id    = azurerm_virtual_network.vnet[each.key].id
+  registration_enabled  = false
+  tags                  = var.tags
+}
+
 resource "azurerm_virtual_network_peering" "mesh" {
   for_each = local.peering_pairs
 

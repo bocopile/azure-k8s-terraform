@@ -74,6 +74,21 @@ resource "azurerm_role_assignment" "cp_network_contributor" {
 }
 
 # ============================================================
+# Role Assignments — Control Plane → Private DNS Zone Contributor
+# AKS Private Cluster가 공유 DNS Zone에 레코드 등록 필요
+# ============================================================
+
+resource "azurerm_role_assignment" "cp_dns_contributor" {
+  for_each = var.aks_private_dns_zone_id != "" ? var.clusters : {}
+
+  principal_id         = azurerm_user_assigned_identity.control_plane[each.key].principal_id
+  role_definition_name = "Private DNS Zone Contributor"
+  scope                = var.aks_private_dns_zone_id
+
+  skip_service_principal_aad_check = true
+}
+
+# ============================================================
 # Role Assignments — cert-manager → DNS Zone Contributor
 # (only when dns_zone_id is set)
 # ============================================================

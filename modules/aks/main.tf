@@ -32,7 +32,8 @@ resource "azurerm_kubernetes_cluster" "aks" {
   sku_tier = "Standard"
 
   # Private cluster — API Server 공개 엔드포인트 없음 (ADR-021 / C15)
-  private_cluster_enabled = true
+  private_cluster_enabled             = true
+  private_dns_zone_id                 = var.aks_private_dns_zone_id
 
   # Node OS 자동 업그레이드 (보안 패치)
   node_os_upgrade_channel = "NodeImage"

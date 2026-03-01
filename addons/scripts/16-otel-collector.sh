@@ -2,13 +2,10 @@
 # ============================================================
 # 16-otel-collector.sh — OpenTelemetry Collector (분산 트레이싱)
 #
-# Istio span + 앱 trace → Azure Application Insights로 전달.
-# Managed Prometheus(Metrics) + Container Insights(Logs) +
-# OTel Collector(Traces) → E2E Observability 삼각형 완성.
-#
-# App Insights Connection String은 Terraform output에서 가져옴.
-#
-# 대상: 전체 클러스터 (mgmt, app1, app2)
+# HA 설정:
+#   - replicas: 2 (HPA min), resources, PDB, TopologySpread
+#   - HPA: min 2 / max 5 / CPU 70%
+#   - PriorityClass: platform-critical
 #
 # Usage: ./16-otel-collector.sh <cluster-name>
 # ============================================================
@@ -48,6 +45,15 @@ helm upgrade --install otel-collector open-telemetry/opentelemetry-collector \
   --version "${OTEL_CHART_VERSION}" \
   --set mode=deployment \
   --set replicaCount=2 \
+  --set resources.requests.cpu=50m \
+  --set resources.requests.memory=64Mi \
+  --set resources.limits.cpu=500m \
+  --set resources.limits.memory=256Mi \
+  --set priorityClassName=platform-critical \
+  --set 'topologySpreadConstraints[0].maxSkew=1' \
+  --set 'topologySpreadConstraints[0].topologyKey=topology.kubernetes.io/zone' \
+  --set 'topologySpreadConstraints[0].whenUnsatisfiable=ScheduleAnyway' \
+  --set 'topologySpreadConstraints[0].labelSelector.matchLabels.app\.kubernetes\.io/name=opentelemetry-collector' \
   --set 'config.exporters.azuremonitor.connection_string=${env:APPINSIGHTS_CONNECTION_STRING}' \
   --set config.receivers.otlp.protocols.grpc.endpoint="0.0.0.0:4317" \
   --set config.receivers.otlp.protocols.http.endpoint="0.0.0.0:4318" \
@@ -58,10 +64,41 @@ helm upgrade --install otel-collector open-telemetry/opentelemetry-collector \
   --set "extraEnvs[0].valueFrom.secretKeyRef.key=connection-string" \
   --wait
 
-echo "[otel] ✓ Installed OTel Collector v${OTEL_CHART_VERSION} on ${CLUSTER}"
-echo "[otel] TODO: Istio mesh config에 extensionProviders로 OTel 등록"
-echo "   meshConfig.extensionProviders:"
-echo "     - name: otel-tracing"
-echo "       opentelemetry:"
-echo "         service: otel-collector.${NAMESPACE}.svc.cluster.local"
-echo "         port: 4317"
+# PDB
+cat <<EOF | kubectl apply -f -
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: otel-collector
+  namespace: ${NAMESPACE}
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: opentelemetry-collector
+EOF
+
+# HPA
+cat <<EOF | kubectl apply -f -
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: otel-collector
+  namespace: ${NAMESPACE}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: otel-collector-opentelemetry-collector
+  minReplicas: 2
+  maxReplicas: 5
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+EOF
+
+echo "[otel] ✓ Installed OTel Collector v${OTEL_CHART_VERSION} on ${CLUSTER} (HA + HPA)"

@@ -31,6 +31,12 @@ variable "key_vault_id" {
   type        = string
 }
 
+variable "aks_private_dns_zone_id" {
+  description = "AKS Private Cluster shared DNS Zone ID (control plane needs Private DNS Zone Contributor)"
+  type        = string
+  default     = ""
+}
+
 variable "dns_zone_id" {
   description = "Azure DNS Zone resource ID for cert-manager (empty string = skip)"
   type        = string

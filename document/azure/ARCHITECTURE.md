@@ -423,6 +423,11 @@ resource "azurerm_kubernetes_cluster" "aks" {
 | **VNet Peering** | mgmt ↔ app1, mgmt ↔ app2, app1 ↔ app2 |
 | **Private Endpoint** | Key Vault (구현 완료) — Azure Monitor Workspace PE는 향후 추가 검토 |
 | **AKS API Server** | Private Cluster (`private_cluster_enabled = true`) — 공개 엔드포인트 없음, VNet 내부 DNS 해석, Jump VM 경유 필수 |
+| **AKS Private DNS Zone** | 공유 DNS Zone (`privatelink.koreacentral.azmk8s.io`) — 3개 VNet 모두 링크, Jump VM에서 전 클러스터 API Server 접근 가능 |
+
+> **Private DNS Zone 공유**: VNet Peering은 트래픽만 전달하고 DNS 쿼리는 전달하지 않는다.
+> AKS Private Cluster의 API Server FQDN 해석을 위해 공유 Private DNS Zone을 생성하고
+> 3개 VNet에 VNet Link를 설정한다. Control Plane Identity에 `Private DNS Zone Contributor` 역할을 부여한다.
 
 ### 5.7 관리자 접근 아키텍처 (ADR-021)
 
@@ -447,7 +452,7 @@ AKS API Server (Private Cluster — VNet 내부 DNS 해석, 공개 엔드포인�
 | **Jump VM 크기** | Standard_B2s (2vCPU/4GB) — 관리 작업 전용 |
 | **Jump VM 위치** | mgmt VNet (10.1.0.0/16), private IP만 할당 |
 | **AzureBastionSubnet** | 10.1.100.0/26 (mgmt VNet 내, /26 이상 필수) |
-| **AKS API Server** | Private Cluster — 공개 엔드포인트 없음, private DNS zone 자동 생성 |
+| **AKS API Server** | Private Cluster — 공유 Private DNS Zone (`privatelink.koreacentral.azmk8s.io`), 3개 VNet Link |
 | **인증** | Entra ID (Azure Bastion) + SSH Key (Jump VM) |
 | **Resource Group** | rg-k8s-demo-mgmt |
 
@@ -707,6 +712,8 @@ spec:
 | `require-resource-limits` | Enforce | requests/limits 필수 |
 | `disallow-privileged-containers` | Enforce | `privileged: false` 강제 |
 | `require-labels` | Audit | app, version 라벨 필수 |
+| `generate-pdb` | Generate | replicas > 1인 Deployment에 PDB 자동 생성 (minAvailable: 1) |
+| `require-topology-spread` | Audit | replicas > 1인 Deployment에 `topology.kubernetes.io/zone` TopologySpread 강제 |
 
 #### ADR-003 상세: Kyverno 배치 범위
 
@@ -1284,6 +1291,22 @@ resource "azurerm_data_protection_backup_vault" "bv" {
 | Cilium Tetragon | **v1.4.0** | Helm 수동 설치 | ✅ |
 | OpenTelemetry Collector | **v0.116.0** | Helm 수동 설치 | ✅ |
 | VPA (Fairwinds) | **v4.7.1** | Helm 수동 설치 | ✅ |
+
+**Addon HA 설정 (Helm 설치 대상)**:
+
+| Addon | replicas | PDB | HPA | TopologySpread | PriorityClass |
+|-------|----------|-----|-----|---------------|--------------|
+| cert-manager | 2 | minAvailable: 1 | min 2 / max 4 / CPU 80% | zone | platform-critical |
+| ESO | 2 | chart 내장 | min 2 / max 4 / CPU 80% | zone | platform-critical |
+| Reloader | 2 | minAvailable: 1 | min 2 / max 3 / CPU 80% | — | platform-critical |
+| Kyverno (admission) | 3 | minAvailable: 2 | min 3 / max 5 / CPU 70% | zone | platform-critical |
+| Kiali | 1 | — | — | — | workload-high |
+| Tetragon | DaemonSet | — | — | — | system-node-critical |
+| OTel Collector | 2 | minAvailable: 1 | min 2 / max 5 / CPU 70% | zone | platform-critical |
+| VPA | 1 | — | — | — | platform-critical |
+
+> Kyverno ClusterPolicy `generate-pdb`가 replicas > 1인 사용자 Deployment에 PDB를 자동 생성한다.
+> `require-topology-spread` (Audit 모드)가 TopologySpreadConstraints 미설정 감지 시 리포트한다.
 
 **`install.sh` CLI 사용법**:
 

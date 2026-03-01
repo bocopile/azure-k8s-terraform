@@ -116,10 +116,11 @@ module "identity" {
   location     = local.location
   rg_common    = local.rg_common
   clusters     = local.clusters
-  acr_id       = module.acr.acr_id
-  vnet_ids     = module.network.vnet_ids
-  key_vault_id = module.keyvault.key_vault_id
-  dns_zone_id  = var.dns_zone_id
+  acr_id                  = module.acr.acr_id
+  vnet_ids                = module.network.vnet_ids
+  key_vault_id            = module.keyvault.key_vault_id
+  aks_private_dns_zone_id = module.network.aks_private_dns_zone_id
+  dns_zone_id             = var.dns_zone_id
   tags         = var.tags
 
   depends_on = [module.network, module.acr, module.keyvault]
@@ -168,8 +169,9 @@ module "aks" {
   rg_common             = local.rg_common
 
   subnet_ids        = module.network.aks_subnet_ids
-  bastion_subnet_id = module.network.bastion_subnet_id
-  jumpbox_subnet_id = module.network.jumpbox_subnet_id
+  bastion_subnet_id       = module.network.bastion_subnet_id
+  jumpbox_subnet_id       = module.network.jumpbox_subnet_id
+  aks_private_dns_zone_id = module.network.aks_private_dns_zone_id
 
   control_plane_identity_ids = module.identity.control_plane_identity_ids
   kubelet_identity_ids       = module.identity.kubelet_identity_ids

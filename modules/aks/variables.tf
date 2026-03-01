@@ -84,6 +84,11 @@ variable "kubelet_object_ids" {
   type        = map(string)
 }
 
+variable "aks_private_dns_zone_id" {
+  description = "Shared Private DNS Zone ID for AKS Private Cluster (cross-VNet API Server resolution)"
+  type        = string
+}
+
 variable "log_analytics_workspace_id" {
   description = "Log Analytics Workspace ID for Container Insights"
   type        = string

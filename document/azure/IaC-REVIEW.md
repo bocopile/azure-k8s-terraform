@@ -68,8 +68,8 @@ azure-k8s-terraform/
 
 | 모듈 | 주요 리소스 | 예상 수 |
 |------|------------|--------|
-| network | RG, VNet×3, Subnet×5, NSG×5, Peering×6 | ~20 |
-| identity | MI×9, RoleAssignment×9+ | ~20 |
+| network | RG, VNet×3, Subnet×5, NSG×5, Peering×6, AKS Private DNS Zone×1, VNet Link×3 | ~24 |
+| identity | MI×9, RoleAssignment×9+, DNS Zone Contributor×3 | ~23 |
 | keyvault | Key Vault×1, RoleAssignment×1, PE×1, DNS Zone×1, DiagSetting×1 | 6+ |
 | acr | ACR×1 | 1 |
 | monitoring | LAW×1, MonitorWS×1, AppInsights×1, Grafana×1, RoleAssignment×2, DiagSetting(Activity)×1, Sentinel(선택)×3 | 6~10 |
@@ -77,7 +77,7 @@ azure-k8s-terraform/
 | aks | RG×3, AKS×3, NodePool×5, Bastion×1, JumpVM×1, NIC×1, PIP×1, DCE×3, DCR×3, DCRA×3, DiagSetting×3, MetricAlert×6, ScheduledQuery×3 | ~39 |
 | flow-logs (root) | NetworkWatcher×1, StorageAccount×1, FlowLog×3 | 5 |
 | federation | FederatedCredential×3 (cert-manager) | 3 |
-| **합계** | | **~102 리소스** |
+| **합계** | | **~109 리소스** |
 
 > NodePool은 system×3 + ingress×2(mgmt,app1) = 5. Worker Pool은 NAP/Karpenter가 관리하므로 Terraform에서 생성하지 않음.
 
@@ -205,7 +205,7 @@ AKS가 자동으로 생성하는 리소스는 Terraform state에 없음:
 
 | 리소스 | 생성 주체 | 삭제 방법 |
 |--------|---------|---------|
-| Private DNS Zone (`privatelink.*.azmk8s.io`) | AKS 자동 생성 | AKS 삭제 시 연동 삭제 |
+| Private DNS Zone (`privatelink.*.azmk8s.io`) | Terraform 공유 DNS Zone (network 모듈) | `tofu destroy` 시 자동 삭제 |
 | Node RG (`MC_*`) | AKS 자동 생성 | AKS 삭제 시 연동 삭제 |
 | Azure Load Balancer (Ingress용) | AKS/K8s | Service 삭제 후 AKS 삭제 |
 | PersistentVolume (Azure Disk) | AKS/K8s | `kubectl delete pv` 후 AKS 삭제 |
