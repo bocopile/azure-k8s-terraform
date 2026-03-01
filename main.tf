@@ -118,7 +118,7 @@ module "identity" {
   acr_id       = module.acr.acr_id
   vnet_ids     = module.network.vnet_ids
   key_vault_id = module.keyvault.key_vault_id
-  dns_zone_id  = "" # Azure DNS Zone ID (cert-manager DNS-01 챌린지용, 설정 시 입력)
+  dns_zone_id  = var.dns_zone_id
   tags         = var.tags
 
   depends_on = [module.network, module.acr, module.keyvault]

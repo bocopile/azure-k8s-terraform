@@ -44,6 +44,12 @@ variable "subscription_id" {
   type        = string
 }
 
+variable "dns_zone_id" {
+  description = "Azure DNS Zone resource ID for cert-manager DNS-01 challenge (leave empty to skip DNS-01)"
+  type        = string
+  default     = ""
+}
+
 variable "tags" {
   description = "Common resource tags applied to all resources"
   type        = map(string)

@@ -321,7 +321,7 @@ resource "azurerm_kubernetes_cluster" "aks" {
   network_profile {
     network_plugin      = "azure"
     network_plugin_mode = "overlay"
-    network_dataplane   = "cilium"
+    network_data_plane  = "cilium"
   }
 }
 ```
@@ -352,7 +352,7 @@ resource "azurerm_kubernetes_cluster" "aks" {
 > **[향후 전환 예정]** Gateway API — AKS Istio Add-on Preview, GA 확정 시 전환 검토 (AKS release notes/release status 기준 추적)
 > **[조기 전환 검토]** 2026년 중 Preview 기능이 안정화된 경우 기술 부채 최소화를 위해 Phase 2에서 Gateway API 기본 적용을 검토할 수 있음
 
-- CRD 버전: **v1.3.0** (수동 설치 — `install-gateway-api.sh`, Istio GA 전환 대비 사전 배포)
+- CRD 버전: **v1.3.0** (수동 설치 — `00b-gateway-api.sh`, Istio GA 전환 대비 사전 배포)
 - GA 전까지는 Istio classic API 사용 — CRD 설치만 완료하고 실제 Gateway/HTTPRoute 리소스는 미사용
 
 ### 5.4 AKS Istio Add-on (asm-1-28)
@@ -420,7 +420,7 @@ resource "azurerm_kubernetes_cluster" "aks" {
 | 방식 | 구현 |
 |-----|------|
 | **VNet Peering** | mgmt ↔ app1, mgmt ↔ app2, app1 ↔ app2 |
-| **Private Endpoint** | Key Vault, Azure Monitor Workspace |
+| **Private Endpoint** | Key Vault (구현 완료) — Azure Monitor Workspace PE는 향후 추가 검토 |
 | **AKS API Server** | Private Cluster (`private_cluster_enabled = true`) — 공개 엔드포인트 없음, VNet 내부 DNS 해석, Jump VM 경유 필수 |
 
 ### 5.7 관리자 접근 아키텍처 (ADR-021)
@@ -750,8 +750,8 @@ resource "azurerm_role_assignment" "aks_acr" {
 
 ```
 AKS Cluster
- └─ System-assigned Managed Identity (AKS 운영)
- └─ Kubelet Identity → ACR (AcrPull)
+ └─ User-Assigned Managed Identity (Control Plane)
+ └─ User-Assigned Kubelet Identity → ACR (AcrPull)
  └─ Workload Identity Federation
       ├─ cert-manager → Key Vault (인증서) + Azure DNS Zone (DNS-01)
       ├─ Key Vault CSI Driver → Key Vault (시크릿)
@@ -772,7 +772,7 @@ AKS Cluster
 | **로그** | Container Insights → Log Analytics Workspace | **무료** (5GB/월) |
 | **트레이싱** | Application Insights (OpenTelemetry) | **무료** (5GB/월 공유) |
 | **네트워크 플로우** | Cilium Hubble (UI + Relay) | **무료** |
-| **서비스 그래프** | Kiali v2.21 (Helm 설치, mgmt + app1) | Helm 직접 설치 |
+| **서비스 그래프** | Kiali v2.21 (Helm 설치, mgmt only) | Helm 직접 설치 |
 
 #### ADR-006 상세: Azure Managed Prometheus
 
@@ -1095,7 +1095,7 @@ azure-k8s-terraform/
 │   ├── network/            # VNet(×3), NSG, VNet Peering
 │   ├── aks/                # AKS 클러스터, Node Pool(system/ingress/worker), 애드온
 │   ├── identity/           # Managed Identity, Workload Identity, RBAC
-│   ├── keyvault/           # Key Vault, Access Policy
+│   ├── keyvault/           # Key Vault (RBAC mode), Private Endpoint
 │   ├── acr/                # Container Registry
 │   ├── monitoring/         # Monitor Workspace, Log Analytics, App Insights
 │   └── backup/             # Backup Vault (ZoneRedundant), Backup Policy
@@ -1145,9 +1145,14 @@ locals {
   zones    = ["1", "2", "3"]
 
   clusters = {
-    mgmt = { system_nodes = 3, ingress_nodes = 3 }
-    app1 = { system_nodes = 3, ingress_nodes = 3 }
-    app2 = { system_nodes = 3, ingress_nodes = 0 }  # Istio 미배포
+    mgmt = { has_ingress_pool = true,  vnet_key = "mgmt" }
+    app1 = { has_ingress_pool = true,  vnet_key = "app1" }
+    app2 = { has_ingress_pool = false, vnet_key = "app2" }  # Ingress 미배포
+  }
+
+  # Clusters that get an ingress node pool (mgmt + app1)
+  clusters_with_ingress = {
+    for k, v in local.clusters : k => v if v.has_ingress_pool
   }
 }
 ```
@@ -1176,14 +1181,9 @@ resource "azurerm_kubernetes_cluster_node_pool" "ingress" {
   node_labels = { "role" = "ingress" }
 }
 
-# Worker (Spot + AZ + Karpenter)
-resource "azurerm_kubernetes_cluster_node_pool" "worker" {
-  node_count      = 0
-  priority        = "Spot"
-  eviction_policy = "Delete"
-  spot_max_price  = -1
-  zones           = local.zones
-}
+# Worker — NAP/Karpenter가 관리 (Terraform에서 별도 node pool 생성 안 함)
+# node_provisioning_profile { mode = "Auto" } 로 활성화
+# Worker 노드 설정은 addons/scripts/08-karpenter-nodepool.sh 참조
 
 # Backup Vault (ZRS)
 resource "azurerm_data_protection_backup_vault" "bv" {
@@ -1191,23 +1191,26 @@ resource "azurerm_data_protection_backup_vault" "bv" {
 }
 ```
 
-### 12.4 Phase 2: Addon Installation (`bash addons/install.sh --all`, 10~15분)
+### 12.4 Phase 2: Addon Installation (`./addons/install.sh --cluster all`, 10~15분)
 
 | # | 스크립트 | 대상 | 버전 | 의존성 |
 |---|---------|------|------|--------|
-| 0 | `install-priority-classes.sh` | 전 클러스터 | — | kubeconfig |
-| 1 | `enable-hubble.sh` | 전 클러스터 | Cilium 1.14.10 (AKS 관리) | AKS 생성 |
-| 2 | `install-gateway-api.sh` | 전 클러스터 | **v1.3.0** | Cilium |
-| 3 | `install-cert-manager.sh` | 전 클러스터 | **v1.19.x** | AKS 생성 (Workload Identity) |
-| 4 | `enable-istio-addon.sh` | mgmt + app1 | **asm-1-28** | cert-manager |
-| 5 | `install-kiali.sh` | mgmt + app1 | **v2.21 (Helm 1.28.0)** | Istio |
-| 6 | `enable-flux-gitops.sh` | 전 클러스터 | AKS 자동 관리 | AKS 생성 |
-| 7 | `install-kyverno.sh` | app1/app2 | **Helm chart v3.7.1 / App v1.16.x** | 없음 (독립 설치) |
-| 8 | `install-eso.sh` | 전 클러스터 | **Helm 0.10.x** | Workload Identity |
-| 9 | `install-reloader.sh` | 전 클러스터 | **Helm 1.x** | 없음 (독립 설치) |
-| 10 | `enable-defender.sh` | 전 클러스터 | AKS 자동 관리 | AKS 생성 |
-| 11 | `enable-aks-backup.sh` | 전 클러스터 | AKS 자동 관리 | Backup Vault |
-| — | `scripts/verify-clusters.sh` | 검증 | — | 전체 완료 |
+| 00 | `00-priority-classes.sh` | 전 클러스터 | — | kubeconfig |
+| 00b | `00b-gateway-api.sh` | 전 클러스터 | **v1.3.0** | priority-classes |
+| 01 | `01-cert-manager.sh` | mgmt only | **v1.19.x** | AKS 생성 (Workload Identity) |
+| 02 | `02-external-secrets.sh` | 전 클러스터 | **Helm 0.10.x** | Workload Identity |
+| 03 | `03-reloader.sh` | 전 클러스터 | **Helm 1.x** | 없음 (독립 설치) |
+| 04 | `04-istio.sh` | mgmt + app1 | **asm-1-28** | cert-manager |
+| 05 | `05-kyverno.sh` | app1/app2 | **Helm chart v3.7.1 / App v1.16.x** | 없음 (독립 설치) |
+| 06 | `06-flux.sh` | 전 클러스터 | AKS 자동 관리 | AKS 생성 |
+| 07 | `07-kiali.sh` | mgmt only | **v2.21 (Helm 1.28.0)** | Istio |
+| 08 | `08-karpenter-nodepool.sh` | 전 클러스터 | Karpenter v1.6.5-aks | NAP 활성화 |
+| 09 | `09-backup-extension.sh` | 전 클러스터 | AKS 자동 관리 | Backup Vault |
+| 10 | `10-defender.sh` | 전 클러스터 | AKS 자동 관리 | AKS 생성 |
+| 11 | `11-budget-alert.sh` | 구독 레벨 | — | 없음 |
+| 12 | `12-aks-automation.sh` | 구독 레벨 | — | 없음 |
+| 13 | `13-hubble.sh` | 전 클러스터 | Cilium 1.14.10 (AKS 관리) | AKS 생성 |
+| 14 | `14-verify-clusters.sh` | 검증 | — | 전체 완료 |
 
 > **verify-clusters.sh 체크 항목**: 전 클러스터 노드 Ready / 전 Pod Running(또는 Completed) / Managed Cilium HubbleRelay Ready / Flux GitRepository/Kustomization Reconciled / Istio istiod Ready (mgmt·app1) / Kyverno admission webhook Ready (app1·app2) / ESO ClusterSecretStore Ready / Reloader Deployment Ready / Key Vault에 TLS 인증서 동기화 확인
 
@@ -1230,23 +1233,18 @@ resource "azurerm_data_protection_backup_vault" "bv" {
 | AKS Backup Extension | AKS 자동 관리 | AKS 자동 관리 | ✅ |
 | Container Insights | AKS 자동 관리 | AKS 자동 관리 | ✅ |
 
-**`--category` 포함 스크립트 매핑**:
-
-| 카테고리 | 포함 스크립트 | 대상 |
-|---------|-------------|------|
-| `networking` | enable-hubble, install-gateway-api, install-cert-manager, enable-istio-addon, install-kiali | 전 클러스터 / mgmt+app1 |
-| `security` | install-kyverno, enable-defender | app1/app2, 전 클러스터 |
-| `gitops` | enable-flux-gitops | 전 클러스터 |
-| `backup` | enable-aks-backup | 전 클러스터 |
+**`install.sh` CLI 사용법**:
 
 ```bash
-bash addons/install.sh --all
+# 전체 클러스터 설치
+./addons/install.sh --cluster all
 
-# 카테고리별
-bash addons/install.sh --category networking
-bash addons/install.sh --category security
-bash addons/install.sh --category gitops
-bash addons/install.sh --category backup
+# 특정 클러스터만
+./addons/install.sh --cluster mgmt
+./addons/install.sh --cluster app1
+
+# Dry-run (실제 실행 없이 순서 확인)
+./addons/install.sh --cluster all --dry-run
 ```
 
 > **향후 개선 방향 (ADR-009)**: Addon 수 증가 시 Flux `HelmRelease` 또는 OpenTofu `helm_release`로

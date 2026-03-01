@@ -18,6 +18,9 @@ kv_suffix = "abc123"
 jumpbox_admin_username = "azureadmin"
 jumpbox_ssh_public_key = "ssh-rsa AAAA... your-public-key-here"
 
+# DNS Zone for cert-manager DNS-01 challenge (optional, leave empty to skip)
+# dns_zone_id = "/subscriptions/.../resourceGroups/.../providers/Microsoft.Network/dnsZones/example.com"
+
 # Resource tags
 tags = {
   project     = "azure-k8s-demo"

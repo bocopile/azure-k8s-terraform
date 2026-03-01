@@ -18,6 +18,12 @@ variable "app_insights_name" {
   type = string
 }
 
+variable "enable_sentinel" {
+  description = "Enable Microsoft Sentinel on Log Analytics Workspace"
+  type        = bool
+  default     = false
+}
+
 variable "tags" {
   type    = map(string)
   default = {}

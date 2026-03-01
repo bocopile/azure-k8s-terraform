@@ -19,7 +19,12 @@
 #   11  budget-alert      — $250/월 예산 알림
 #   12  aks-automation    — AKS Stop/Start 자동화
 #   13  hubble            — Cilium Hubble UI (전체)
-#   14  verify-clusters   — 최종 검증
+#   15  tetragon          — Cilium Tetragon 런타임 보안 (전체)
+#   16  otel-collector    — OpenTelemetry Collector (전체)
+#   17  trivy-operator    — Trivy Operator 보안 스캔 (전체)
+#   18  kaito             — KAITO AI Toolchain Operator (app1/app2)
+#   19  vpa               — Vertical Pod Autoscaler (전체)
+#   14  verify-clusters   — 최종 검증 (항상 마지막)
 #
 # Usage:
 #   chmod +x addons/install.sh
@@ -42,6 +47,10 @@ DRY_RUN=false
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --cluster)
+      if [[ -z "${2:-}" ]]; then
+        echo "ERROR: --cluster requires a value (mgmt|app1|app2|all)" >&2
+        exit 1
+      fi
       CLUSTER_TARGET="$2"
       shift 2
       ;;
@@ -55,6 +64,13 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+# --cluster 값 검증
+valid_targets="all mgmt app1 app2"
+if [[ ! " ${valid_targets} " =~ " ${CLUSTER_TARGET} " ]]; then
+  echo "ERROR: Invalid --cluster value '${CLUSTER_TARGET}'. Must be one of: ${valid_targets}" >&2
+  exit 1
+fi
 
 log() { echo "[$(date '+%Y-%m-%dT%H:%M:%S')] $*"; }
 run() {
@@ -186,7 +202,47 @@ for cluster in mgmt app1 app2; do
   fi
 done
 
-# --- Step 14: 최종 검증 ---
+# --- Step 15: Cilium Tetragon 런타임 보안 (전체) ---
+for cluster in mgmt app1 app2; do
+  if [[ "${CLUSTER_TARGET}" == "all" || "${CLUSTER_TARGET}" == "${cluster}" ]]; then
+    log "--- [15] Installing Cilium Tetragon on ${cluster} ---"
+    run "${SCRIPTS_DIR}/15-tetragon.sh" "${cluster}"
+  fi
+done
+
+# --- Step 16: OpenTelemetry Collector (전체) ---
+for cluster in mgmt app1 app2; do
+  if [[ "${CLUSTER_TARGET}" == "all" || "${CLUSTER_TARGET}" == "${cluster}" ]]; then
+    log "--- [16] Installing OTel Collector on ${cluster} ---"
+    run "${SCRIPTS_DIR}/16-otel-collector.sh" "${cluster}"
+  fi
+done
+
+# --- Step 17: Trivy Operator 보안 스캔 (전체) ---
+for cluster in mgmt app1 app2; do
+  if [[ "${CLUSTER_TARGET}" == "all" || "${CLUSTER_TARGET}" == "${cluster}" ]]; then
+    log "--- [17] Installing Trivy Operator on ${cluster} ---"
+    run "${SCRIPTS_DIR}/17-trivy-operator.sh" "${cluster}"
+  fi
+done
+
+# --- Step 18: KAITO AI Toolchain (app1, app2) ---
+for cluster in app1 app2; do
+  if [[ "${CLUSTER_TARGET}" == "all" || "${CLUSTER_TARGET}" == "${cluster}" ]]; then
+    log "--- [18] Installing KAITO on ${cluster} ---"
+    run "${SCRIPTS_DIR}/18-kaito.sh" "${cluster}"
+  fi
+done
+
+# --- Step 19: Vertical Pod Autoscaler (전체) ---
+for cluster in mgmt app1 app2; do
+  if [[ "${CLUSTER_TARGET}" == "all" || "${CLUSTER_TARGET}" == "${cluster}" ]]; then
+    log "--- [19] Installing VPA on ${cluster} ---"
+    run "${SCRIPTS_DIR}/19-vpa.sh" "${cluster}"
+  fi
+done
+
+# --- Step 14: 최종 검증 (항상 마지막) ---
 if [[ "${CLUSTER_TARGET}" == "all" ]]; then
   log "--- [14] Running cluster verification ---"
   run "${SCRIPTS_DIR}/14-verify-clusters.sh"

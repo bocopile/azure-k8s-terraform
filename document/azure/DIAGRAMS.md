@@ -36,15 +36,20 @@ graph TB
     subgraph Azure["Azure Cloud (Korea Central)"]
 
         subgraph Common["rg-k8s-demo-common"]
-            VNet["VNet 10.0.0.0/8"]
+            VNet_MGMT["VNet mgmt<br/>10.1.0.0/16"]
+            VNet_APP1["VNet app1<br/>10.2.0.0/16"]
+            VNet_APP2["VNet app2<br/>10.3.0.0/16"]
             KV["Azure Key Vault"]
             MON["Azure Monitor Workspace<br/>(Managed Prometheus)"]
             LAW["Log Analytics Workspace"]
             AI["Application Insights"]
             BV["Azure Backup Vault"]
-            DNS["Azure DNS Zone"]
             ACR["Azure Container Registry<br/>(Basic)"]
         end
+
+        VNet_MGMT <-->|"VNet Peering"| VNet_APP1
+        VNet_MGMT <-->|"VNet Peering"| VNet_APP2
+        VNet_APP1 <-->|"VNet Peering"| VNet_APP2
 
         subgraph MGMT["rg-k8s-demo-mgmt"]
             subgraph AKS_MGMT["AKS mgmt (Standard Tier, Zone 1/2/3)"]
@@ -507,7 +512,7 @@ graph TB
         CIA["Container Insights Agent<br/>(관리형 DaemonSet)"]
         APP["App Pod<br/>(OTel SDK)"]
         CILIUM["Cilium + Hubble"]
-        KIALI["Kiali<br/>(mgmt, app1만)"]
+        KIALI["Kiali<br/>(mgmt only)"]
     end
 
     subgraph AzureMonitor["Azure Monitor (클러스터 외부)"]

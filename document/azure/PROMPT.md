@@ -80,7 +80,7 @@ azure-k8s-terraform/
 │   └── backup/           # Backup Vault (ZoneRedundant)
 ├── addons/               # [구현 예정]
 │   ├── install.sh        # Phase 2 진입점 (전체 실행)
-│   └── scripts/          # 개별 Addon 설치 스크립트 (12개)
+│   └── scripts/          # 개별 Addon 설치 스크립트 (16개)
 └── document/azure/       # 아키텍처 문서 및 프롬프트 [현재 존재]
 ```
 
@@ -171,16 +171,20 @@ locals {
   zones    = ["1", "2", "3"]
 
   clusters = {
-    mgmt = { system_nodes = 3, ingress_nodes = 3 }
-    app1 = { system_nodes = 3, ingress_nodes = 3 }
-    app2 = { system_nodes = 3, ingress_nodes = 0 }  # Ingress 미배포
+    mgmt = { has_ingress_pool = true,  vnet_key = "mgmt" }
+    app1 = { has_ingress_pool = true,  vnet_key = "app1" }
+    app2 = { has_ingress_pool = false, vnet_key = "app2" }  # Ingress 미배포
+  }
+
+  clusters_with_ingress = {
+    for k, v in local.clusters : k => v if v.has_ingress_pool
   }
 
   vm_sizes = {
     system  = "Standard_D2s_v5"
     ingress = "Standard_D2s_v5"
-    worker  = "Standard_D2s_v5"   # Spot, Karpenter 관리
     jumpbox = "Standard_B2s"
+    # worker 사이즈는 Karpenter/NAP NodePool CRD에서 직접 관리
   }
 }
 ```
@@ -189,26 +193,26 @@ locals {
 
 ```hcl
 terraform {
-  required_version = ">= 1.11"
+  required_version = ">= 1.11.0"
   required_providers {
     azurerm = {
       source  = "hashicorp/azurerm"
-      version = "~> 4.0"          # 프로젝트 시작 시 pinning 필수
+      version = "~> 4.14"
     }
-    kubernetes = {
-      source  = "hashicorp/kubernetes"
-      version = "~> 2.0"
+    azuread = {
+      source  = "hashicorp/azuread"
+      version = "~> 3.0"
     }
-    helm = {
-      source  = "hashicorp/helm"
-      version = "~> 2.0"
+    random = {
+      source  = "hashicorp/random"
+      version = "~> 3.6"
     }
   }
 }
 ```
 
-> **주의**: 위 provider 버전은 ARCHITECTURE.md에 명시되지 않은 항목이다.
-> 실제 프로젝트 시작 시 `tofu init` 후 `.terraform.lock.hcl`에 고정된 버전을 기준으로 한다.
+> **주의**: 실제 프로젝트의 `.terraform.lock.hcl`에 고정된 버전을 기준으로 한다.
+> kubernetes/helm provider는 Phase 1에서 사용하지 않음 (Phase 2 Shell Script로 처리).
 
 ---
 
@@ -443,20 +447,24 @@ kubectl get pods -A
 
 ## 7. Phase 2 Addon 설치 순서
 
-| # | 스크립트 | 버전 |
-|---|---------|------|
-| 0 | install-priority-classes.sh | — |
-| 1 | enable-hubble.sh | Cilium 1.14.10 |
-| 2 | install-gateway-api.sh | v1.3.0 |
-| 3 | install-cert-manager.sh | **v1.19.x** |
-| 4 | enable-istio-addon.sh | **asm-1-28** |
-| 5 | install-kiali.sh | **v2.21** |
-| 6 | enable-flux-gitops.sh | AKS 자동 관리 |
-| 7 | install-kyverno.sh | **chart v3.7.1 / app v1.16.x** |
-| 8 | install-eso.sh | Helm 0.10.x |
-| 9 | install-reloader.sh | Helm 1.x |
-| 10 | enable-defender.sh | AKS 자동 관리 |
-| 11 | enable-aks-backup.sh | AKS 자동 관리 |
+| # | 스크립트 | 대상 | 버전 |
+|---|---------|------|------|
+| 00 | `00-priority-classes.sh` | 전체 | — |
+| 00b | `00b-gateway-api.sh` | 전체 | v1.3.0 |
+| 01 | `01-cert-manager.sh` | mgmt only | **v1.19.x** |
+| 02 | `02-external-secrets.sh` | 전체 | Helm 0.10.x |
+| 03 | `03-reloader.sh` | 전체 | Helm 1.x |
+| 04 | `04-istio.sh` | mgmt, app1 | **asm-1-28** |
+| 05 | `05-kyverno.sh` | app1, app2 | **chart v3.7.1 / app v1.16.x** |
+| 06 | `06-flux.sh` | 전체 | AKS 자동 관리 |
+| 07 | `07-kiali.sh` | mgmt only | **v2.21** |
+| 08 | `08-karpenter-nodepool.sh` | 전체 | Karpenter v1.6.5-aks |
+| 09 | `09-backup-extension.sh` | 전체 | AKS 자동 관리 |
+| 10 | `10-defender.sh` | 전체 | AKS 자동 관리 |
+| 11 | `11-budget-alert.sh` | 구독 | — |
+| 12 | `12-aks-automation.sh` | 구독 | — |
+| 13 | `13-hubble.sh` | 전체 | Cilium 1.14.10 |
+| 14 | `14-verify-clusters.sh` | 검증 | — |
 
 ---
 
