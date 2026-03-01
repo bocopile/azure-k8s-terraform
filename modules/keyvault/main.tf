@@ -84,3 +84,24 @@ resource "azurerm_private_endpoint" "kv" {
     private_dns_zone_ids = [azurerm_private_dns_zone.kv.id]
   }
 }
+
+# ============================================================
+# Key Vault Diagnostic Settings → Log Analytics
+# AuditEvent: 접근·수정 이력 / AzurePolicyEvaluationDetails: 정책 평가
+# ============================================================
+
+resource "azurerm_monitor_diagnostic_setting" "kv" {
+  count = var.log_analytics_workspace_id != "" ? 1 : 0
+
+  name                       = "diag-${var.name}"
+  target_resource_id         = azurerm_key_vault.kv.id
+  log_analytics_workspace_id = var.log_analytics_workspace_id
+
+  enabled_log { category = "AuditEvent" }
+  enabled_log { category = "AzurePolicyEvaluationDetails" }
+
+  metric {
+    category = "AllMetrics"
+    enabled  = true
+  }
+}

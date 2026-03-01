@@ -27,18 +27,19 @@
 ```
 azure-k8s-terraform/
 ├── main.tf                       # Provider 설정 + 모든 모듈 호출
-├── variables.tf                  # 전역 유니크 변수 (acr_name, kv_suffix 등)
+├── variables.tf                  # 전역 유니크 변수 (acr_name, kv_suffix, enable_grafana 등)
 ├── locals.tf                     # location, zones, clusters, vnets, naming
 ├── outputs.tf                    # RG 이름, 클러스터 ID, kubeconfig 커맨드
 ├── federation.tf                 # Workload Identity Federated Credentials
+├── flow-logs.tf                  # NSG Flow Logs + Network Watcher + Traffic Analytics
 ├── modules/
 │   ├── network/                  # VNet, Subnet, NSG, VNet Peering (풀메시)
 │   ├── identity/                 # User-Assigned MI + Role Assignment
-│   ├── keyvault/                 # Key Vault (Standard, RBAC mode, Private Endpoint)
+│   ├── keyvault/                 # Key Vault (Standard, RBAC, PE, Diagnostic Setting)
 │   ├── acr/                      # Container Registry (Basic SKU)
-│   ├── monitoring/               # Log Analytics + Monitor Workspace + App Insights
+│   ├── monitoring/               # LAW + MonitorWS + AppInsights + Sentinel + Grafana + ActivityLog
 │   ├── backup/                   # Backup Vault (ZoneRedundant) + Policy
-│   └── aks/                      # AKS 클러스터, Node Pool, Bastion, Jump VM
+│   └── aks/                      # AKS 클러스터, Node Pool, Bastion, Jump VM, DCR, Diagnostics, Alerts
 └── addons/
     ├── install.sh                 # Phase 2 진입점 (--cluster, --dry-run)
     └── scripts/
@@ -57,7 +58,10 @@ azure-k8s-terraform/
         ├── 11-budget-alert.sh
         ├── 12-aks-automation.sh
         ├── 13-hubble.sh
-        └── 14-verify-clusters.sh
+        ├── 15-tetragon.sh
+        ├── 16-otel-collector.sh
+        ├── 19-vpa.sh
+        └── 14-verify-clusters.sh    # 항상 마지막 실행
 ```
 
 ### 생성 리소스 예상 수
@@ -66,13 +70,14 @@ azure-k8s-terraform/
 |------|------------|--------|
 | network | RG, VNet×3, Subnet×5, NSG×5, Peering×6 | ~20 |
 | identity | MI×9, RoleAssignment×9+ | ~20 |
-| keyvault | Key Vault×1, RoleAssignment×1, Private Endpoint×1, Private DNS Zone×1 | 5+ |
+| keyvault | Key Vault×1, RoleAssignment×1, PE×1, DNS Zone×1, DiagSetting×1 | 6+ |
 | acr | ACR×1 | 1 |
-| monitoring | LAW×1, MonitorWorkspace×1, AppInsights×1 | 3 |
+| monitoring | LAW×1, MonitorWS×1, AppInsights×1, Grafana×1, RoleAssignment×2, DiagSetting(Activity)×1, Sentinel(선택)×3 | 6~10 |
 | backup | BackupVault×1, BackupPolicy×1 | 2 |
-| aks | RG×3, AKS×3, NodePool×6(system×3+ingress×2), Bastion×1, JumpVM×1, NIC×1, PIP×1 | ~18 |
+| aks | RG×3, AKS×3, NodePool×5, Bastion×1, JumpVM×1, NIC×1, PIP×1, DCE×3, DCR×3, DCRA×3, DiagSetting×3, MetricAlert×6, ScheduledQuery×3 | ~39 |
+| flow-logs (root) | NetworkWatcher×1, StorageAccount×1, FlowLog×3 | 5 |
 | federation | FederatedCredential×3 (cert-manager) | 3 |
-| **합계** | | **~72 리소스** |
+| **합계** | | **~102 리소스** |
 
 > NodePool은 system×3 + ingress×2(mgmt,app1) = 5. Worker Pool은 NAP/Karpenter가 관리하므로 Terraform에서 생성하지 않음.
 

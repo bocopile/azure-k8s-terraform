@@ -68,20 +68,22 @@ az account show                                       # 현재 구독 확인
 ```
 azure-k8s-terraform/
 ├── main.tf               # Root module, provider 설정
-├── variables.tf          # 전역 유니크 값 (acr_name 등)
+├── variables.tf          # 전역 유니크 값 (acr_name, enable_grafana 등)
 ├── locals.tf             # location, zones, clusters 정의
-├── modules/              # [구현 예정]
+├── flow-logs.tf          # NSG Flow Logs + Network Watcher + Traffic Analytics
+├── federation.tf         # Workload Identity Federated Credentials
+├── modules/
 │   ├── network/          # VNet ×3, NSG, Peering
-│   ├── aks/              # AKS 클러스터, Node Pool, 애드온
+│   ├── aks/              # AKS 클러스터, Node Pool, Bastion, JumpVM, DCR, Diagnostics, Alerts
 │   ├── identity/         # Managed Identity, Workload Identity
-│   ├── keyvault/         # Key Vault
+│   ├── keyvault/         # Key Vault (Diagnostic Setting 포함)
 │   ├── acr/              # Container Registry
-│   ├── monitoring/       # Monitor Workspace, Log Analytics
+│   ├── monitoring/       # LAW + MonitorWS + AppInsights + Grafana + Sentinel + ActivityLog
 │   └── backup/           # Backup Vault (ZoneRedundant)
-├── addons/               # [구현 예정]
+├── addons/
 │   ├── install.sh        # Phase 2 진입점 (전체 실행)
-│   └── scripts/          # 개별 Addon 설치 스크립트 (16개)
-└── document/azure/       # 아키텍처 문서 및 프롬프트 [현재 존재]
+│   └── scripts/          # 개별 Addon 설치 스크립트 (19개)
+└── document/azure/       # 아키텍처 문서 및 프롬프트
 ```
 
 ### 네이밍 컨벤션
@@ -464,7 +466,10 @@ kubectl get pods -A
 | 11 | `11-budget-alert.sh` | 구독 | — |
 | 12 | `12-aks-automation.sh` | 구독 | — |
 | 13 | `13-hubble.sh` | 전체 | Cilium 1.14.10 |
-| 14 | `14-verify-clusters.sh` | 검증 | — |
+| 15 | `15-tetragon.sh` | 전체 | **Tetragon v1.4.0** |
+| 16 | `16-otel-collector.sh` | 전체 | **OTel Collector v0.116.0** |
+| 19 | `19-vpa.sh` | 전체 | **VPA v4.7.1 (Fairwinds)** |
+| 14 | `14-verify-clusters.sh` | 검증 | — (항상 마지막) |
 
 ---
 

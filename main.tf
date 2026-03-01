@@ -61,10 +61,10 @@ provider "azuread" {
 # ============================================================
 # Module calls
 # Dependency graph (단방향):
-#   network → keyvault → identity → aks
-#              acr    ↗
-#           monitoring ↗
-#           backup ↗
+#   network → monitoring → keyvault → identity → aks
+#             acr       ↗
+#             backup    (independent)
+#   flow-logs.tf (root): network + monitoring outputs 참조
 #   federation.tf (root): identity + aks outputs 참조 (별도 파일)
 # ============================================================
 
@@ -85,15 +85,16 @@ module "network" {
 module "keyvault" {
   source = "./modules/keyvault"
 
-  location      = local.location
-  rg_common     = local.rg_common
-  name          = local.names.key_vault
-  tenant_id     = var.tenant_id
-  pe_subnet_id  = module.network.pe_subnet_id
-  vnet_ids      = module.network.vnet_ids
-  tags          = var.tags
+  location                   = local.location
+  rg_common                  = local.rg_common
+  name                       = local.names.key_vault
+  tenant_id                  = var.tenant_id
+  pe_subnet_id               = module.network.pe_subnet_id
+  vnet_ids                   = module.network.vnet_ids
+  log_analytics_workspace_id = module.monitoring.log_analytics_workspace_id
+  tags                       = var.tags
 
-  depends_on = [module.network]
+  depends_on = [module.network, module.monitoring]
 }
 
 module "acr" {
@@ -132,6 +133,9 @@ module "monitoring" {
   log_analytics_name     = local.names.log_analytics
   monitor_workspace_name = local.names.monitor_workspace
   app_insights_name      = local.names.app_insights
+  grafana_name           = local.names.grafana
+  enable_grafana         = var.enable_grafana
+  enable_sentinel        = var.enable_sentinel
   tags                   = var.tags
 
   depends_on = [module.network]

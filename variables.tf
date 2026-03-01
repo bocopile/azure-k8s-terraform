@@ -50,6 +50,18 @@ variable "dns_zone_id" {
   default     = ""
 }
 
+variable "enable_grafana" {
+  description = "Enable Azure Managed Grafana for Prometheus visualization"
+  type        = bool
+  default     = true
+}
+
+variable "enable_sentinel" {
+  description = "Enable Microsoft Sentinel on Log Analytics Workspace"
+  type        = bool
+  default     = false
+}
+
 variable "tags" {
   description = "Common resource tags applied to all resources"
   type        = map(string)

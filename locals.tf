@@ -86,6 +86,8 @@ locals {
     bastion_pip       = "pip-bastion" # Bastion 전용 Public IP
     jumpbox_vm        = "vm-jumpbox"
     jumpbox_nic       = "nic-jumpbox"
+    grafana           = "grafana-${local.prefix}"
+    flow_log_storage  = "stk8sdemoflowlogs" # 3-24 chars, lowercase alphanumeric only
     # jumpbox는 Public IP 없음 — Bastion 경유 전용 (ARCHITECTURE.md §5.7, ADR-021)
   }
 }

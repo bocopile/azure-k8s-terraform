@@ -26,6 +26,12 @@ variable "vnet_ids" {
   type        = map(string)
 }
 
+variable "log_analytics_workspace_id" {
+  description = "Log Analytics Workspace ID for Key Vault diagnostic settings"
+  type        = string
+  default     = ""
+}
+
 variable "tags" {
   type    = map(string)
   default = {}

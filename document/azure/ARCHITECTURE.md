@@ -56,8 +56,9 @@ Korea Central Availability Zone 분산으로 HA를 시연하고, Spot VM으로 �
 | **GitOps** | AKS GitOps (Flux v2) |
 | **시크릿/PKI** | Azure Key Vault + Key Vault CSI Driver + cert-manager v1.19.x + External Secrets Operator (PushSecret) + Stakater Reloader |
 | **정책** | Pod Security Admission (baseline) + Kyverno Helm chart v3.7.1 / App v1.16.x (app 클러스터) |
-| **관찰성** | Azure Managed Prometheus + Container Insights + Application Insights + Cilium Hubble + Kiali v2.21 |
-| **보안** | Microsoft Defender for Containers + AKS RBAC + Workload Identity |
+| **관찰성** | Azure Managed Prometheus (DCR) + Managed Grafana + Container Insights + Application Insights + OTel Collector + Cilium Hubble + Tetragon + Kiali v2.21 + VPA + Alert Rules + Diagnostic Settings + NSG Flow Logs + Activity Log→LAW |
+| **보안** | Microsoft Defender for Containers + Cilium Tetragon (eBPF 런타임) + AKS RBAC + Workload Identity + Azure Sentinel (선택) |
+| **AI/ML** | — (GPU 쿼터 확보 후 KAITO 추가 가능) |
 | **백업** | Azure Backup for AKS (AKS Backup Extension, GA 2025.02) |
 | **이미지 레지스트리** | Azure Container Registry (Basic SKU) |
 | **관리자 접근** | Azure Bastion + Jump VM (AKS Private Cluster, VNet 내부 전용) |
@@ -590,8 +591,9 @@ spec:
 | **L2 워크로드 정책** | PSA baseline enforce + Kyverno Enforce (app만) | 전 클러스터 |
 | **L3 네트워크** | Managed Cilium NetworkPolicy + Azure NSG | 전 클러스터 |
 | **L4 시크릿** | Azure Key Vault + CSI Driver + ESO PushSecret (Private Key etcd 미노출) + Stakater Reloader (자동 재시작) | 전 클러스터 |
-| **L5 런타임 보안** | Microsoft Defender for Containers (위협 탐지 + 악성코드) | 전 클러스터 |
+| **L5 런타임 보안** | Microsoft Defender for Containers (위협 탐지 + 악성코드) + Cilium Tetragon (eBPF 프로세스/파일 추적) | 전 클러스터 |
 | **L6 취약점 관리** | Defender for Containers (이미지 CVE 스캔 + 배포 차단) | 전 클러스터 |
+| **L7 SIEM/SOAR** | Azure Sentinel (AI 위협 탐지 + Playbook 자동화, 선택적 활성화) | 구독 레벨 |
 
 ### 7.2 Microsoft Defender for Containers
 
@@ -768,11 +770,19 @@ AKS Cluster
 | 영역 | 서비스 | 비용 (시연 규모) |
 |-----|-------|----------------|
 | **메트릭** | Azure Managed Prometheus → Azure Monitor Workspace | ~$1-5/월 |
-| **시각화** | Azure Portal 내장 Grafana 대시보드 | **무료** |
+| **시각화** | Azure Managed Grafana (Standard SKU, Prometheus 자동 연동) | **무료** (Standard: 첫 인스턴스) |
 | **로그** | Container Insights → Log Analytics Workspace | **무료** (5GB/월) |
+| **Control Plane 로그** | AKS Diagnostic Settings → LAW (kube-audit-admin 등 7개 카테고리) | LAW 수집량에 포함 |
+| **Key Vault 감사** | Key Vault Diagnostic Settings → LAW (AuditEvent) | LAW 수집량에 포함 |
+| **Activity Log** | 구독 레벨 Diagnostic Setting → LAW (8개 카테고리, 장기 보존) | LAW 수집량에 포함 |
 | **트레이싱** | Application Insights (OpenTelemetry) | **무료** (5GB/월 공유) |
+| **분산 트레이싱** | OpenTelemetry Collector → Application Insights (OTLP) | Helm 직접 설치 |
 | **네트워크 플로우** | Cilium Hubble (UI + Relay) | **무료** |
+| **NSG Flow Log** | Network Watcher Flow Log v2 + Traffic Analytics → LAW (10분 간격) | ~$0.50/NSG/월 |
+| **런타임 보안 감시** | Cilium Tetragon (eBPF 프로세스/파일/네트워크 추적) | Helm 직접 설치 |
 | **서비스 그래프** | Kiali v2.21 (Helm 설치, mgmt only) | Helm 직접 설치 |
+| **Pod 리소스 최적화** | Vertical Pod Autoscaler (recommend-only 모드) | Helm 직접 설치 |
+| **알림** | Azure Monitor Alert Rules (CPU/Memory >90%, CrashLoopBackOff KQL) | **무료** (기본 rule 포함) |
 
 #### ADR-006 상세: Azure Managed Prometheus
 
@@ -789,13 +799,20 @@ AKS Cluster
 ```
 AKS Cluster (mgmt / app1 / app2)
  ├─ Container Insights Agent (관리형 DaemonSet)
- │    ├─ Prometheus 메트릭 → Azure Monitor Workspace
+ │    ├─ Prometheus 메트릭 → Azure Monitor Workspace (DCE/DCR)
  │    └─ 컨테이너 로그 → Log Analytics Workspace
+ ├─ AKS Diagnostic Setting → LAW (Control Plane 로그 7개 카테고리)
  ├─ Application Insights SDK / OTel → Application Insights (트레이스)
  └─ Cilium Hubble → Hubble UI (네트워크 플로우)
 
-Azure Portal
- ├─ AKS Insights → Managed Prometheus 시각화 (내장 Grafana)
+Azure 인프라 레벨
+ ├─ Key Vault Diagnostic Setting → LAW (AuditEvent)
+ ├─ NSG Flow Logs → Storage Account + Traffic Analytics → LAW
+ └─ Activity Log (구독) → LAW (Administrative, Security 등 8개 카테고리)
+
+Azure Monitor (시각화 · 알림)
+ ├─ Managed Grafana → Prometheus 대시보드 (자동 연동)
+ ├─ Alert Rules → CPU/Memory >90% (Metric), CrashLoopBackOff (KQL)
  ├─ Log Analytics → KQL 쿼리
  ├─ Application Insights → 분산 트레이스 / Application Map
  └─ AKS GitOps → Flux 구성 상태
@@ -804,25 +821,54 @@ Azure Portal
 ### 8.3 OpenTofu 관찰성 구성
 
 ```hcl
-resource "azurerm_monitor_workspace" "prometheus" {
-  name                = "mon-k8s-demo"
-  resource_group_name = azurerm_resource_group.common.name
-  location            = local.location
+# --- modules/monitoring/main.tf ---
+resource "azurerm_monitor_workspace" "mon" { ... }           # Managed Prometheus
+resource "azurerm_log_analytics_workspace" "law" { ... }     # Container Insights + 로그
+resource "azurerm_application_insights" "appi" { ... }       # 분산 트레이싱
+resource "azurerm_dashboard_grafana" "grafana" {              # Managed Grafana
+  grafana_major_version = "10"
+  azure_monitor_workspace_integrations {
+    resource_id = azurerm_monitor_workspace.mon.id            # Prometheus 자동 연동
+  }
+}
+resource "azurerm_monitor_diagnostic_setting" "activity_log" { # 구독 Activity Log → LAW
+  target_resource_id = "/subscriptions/${data.azurerm_subscription.current.subscription_id}"
+  # Administrative, Security, Alert, Policy 등 8개 카테고리
 }
 
-resource "azurerm_log_analytics_workspace" "common" {
-  name                = "law-k8s-demo"
-  resource_group_name = azurerm_resource_group.common.name
-  location            = local.location
-  sku                 = "PerGB2018"
-  retention_in_days   = 30
-}
-
+# --- modules/aks/main.tf ---
 resource "azurerm_kubernetes_cluster" "aks" {
   monitor_metrics {}                          # Managed Prometheus
-  oms_agent {                                 # Container Insights
-    log_analytics_workspace_id = azurerm_log_analytics_workspace.common.id
-  }
+  oms_agent { ... }                           # Container Insights
+}
+
+# --- modules/aks/prometheus.tf — DCE/DCR/DCRA 연결 ---
+resource "azurerm_monitor_data_collection_endpoint" "prometheus" { ... }
+resource "azurerm_monitor_data_collection_rule" "prometheus" { ... }
+resource "azurerm_monitor_data_collection_rule_association" "prometheus" { ... }
+
+# --- modules/aks/diagnostics.tf — Control Plane 로그 ---
+resource "azurerm_monitor_diagnostic_setting" "aks" {
+  for_each = var.clusters
+  # kube-apiserver, kube-audit-admin, kube-controller-manager,
+  # kube-scheduler, cluster-autoscaler, guard, cloud-controller-manager
+}
+
+# --- modules/aks/alerts.tf — 핵심 알림 ---
+resource "azurerm_monitor_metric_alert" "cpu_high" { ... }    # CPU > 90%
+resource "azurerm_monitor_metric_alert" "memory_high" { ... } # Memory > 90%
+resource "azurerm_monitor_scheduled_query_rules_alert_v2" "crashloop" { ... } # CrashLoopBackOff
+
+# --- modules/keyvault/main.tf — Key Vault 감사 로그 ---
+resource "azurerm_monitor_diagnostic_setting" "kv" { ... }    # AuditEvent → LAW
+
+# --- flow-logs.tf (root) — NSG Flow Logs + Traffic Analytics ---
+resource "azurerm_network_watcher" "nw" { ... }
+resource "azurerm_storage_account" "flow_logs" { ... }
+resource "azurerm_network_watcher_flow_log" "aks" {
+  for_each = local.vnets
+  version  = 2
+  traffic_analytics { interval_in_minutes = 10 }              # LAW 연동
 }
 ```
 
@@ -1210,7 +1256,10 @@ resource "azurerm_data_protection_backup_vault" "bv" {
 | 11 | `11-budget-alert.sh` | 구독 레벨 | — | 없음 |
 | 12 | `12-aks-automation.sh` | 구독 레벨 | — | 없음 |
 | 13 | `13-hubble.sh` | 전 클러스터 | Cilium 1.14.10 (AKS 관리) | AKS 생성 |
-| 14 | `14-verify-clusters.sh` | 검증 | — | 전체 완료 |
+| 15 | `15-tetragon.sh` | 전 클러스터 | **Tetragon v1.4.0** | Managed Cilium |
+| 16 | `16-otel-collector.sh` | 전 클러스터 | **OTel Collector v0.116.0** | App Insights |
+| 19 | `19-vpa.sh` | 전 클러스터 | **VPA v4.7.1 (Fairwinds)** | 없음 (독립 설치) |
+| 14 | `14-verify-clusters.sh` | 검증 | — | 전체 완료 (항상 마지막) |
 
 > **verify-clusters.sh 체크 항목**: 전 클러스터 노드 Ready / 전 Pod Running(또는 Completed) / Managed Cilium HubbleRelay Ready / Flux GitRepository/Kustomization Reconciled / Istio istiod Ready (mgmt·app1) / Kyverno admission webhook Ready (app1·app2) / ESO ClusterSecretStore Ready / Reloader Deployment Ready / Key Vault에 TLS 인증서 동기화 확인
 
@@ -1232,6 +1281,9 @@ resource "azurerm_data_protection_backup_vault" "bv" {
 | Defender for Containers | AKS 자동 관리 | AKS 자동 관리 | ✅ |
 | AKS Backup Extension | AKS 자동 관리 | AKS 자동 관리 | ✅ |
 | Container Insights | AKS 자동 관리 | AKS 자동 관리 | ✅ |
+| Cilium Tetragon | **v1.4.0** | Helm 수동 설치 | ✅ |
+| OpenTelemetry Collector | **v0.116.0** | Helm 수동 설치 | ✅ |
+| VPA (Fairwinds) | **v4.7.1** | Helm 수동 설치 | ✅ |
 
 **`install.sh` CLI 사용법**:
 

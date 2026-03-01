@@ -21,8 +21,6 @@
 #   13  hubble            — Cilium Hubble UI (전체)
 #   15  tetragon          — Cilium Tetragon 런타임 보안 (전체)
 #   16  otel-collector    — OpenTelemetry Collector (전체)
-#   17  trivy-operator    — Trivy Operator 보안 스캔 (전체)
-#   18  kaito             — KAITO AI Toolchain Operator (app1/app2)
 #   19  vpa               — Vertical Pod Autoscaler (전체)
 #   14  verify-clusters   — 최종 검증 (항상 마지막)
 #
@@ -215,22 +213,6 @@ for cluster in mgmt app1 app2; do
   if [[ "${CLUSTER_TARGET}" == "all" || "${CLUSTER_TARGET}" == "${cluster}" ]]; then
     log "--- [16] Installing OTel Collector on ${cluster} ---"
     run "${SCRIPTS_DIR}/16-otel-collector.sh" "${cluster}"
-  fi
-done
-
-# --- Step 17: Trivy Operator 보안 스캔 (전체) ---
-for cluster in mgmt app1 app2; do
-  if [[ "${CLUSTER_TARGET}" == "all" || "${CLUSTER_TARGET}" == "${cluster}" ]]; then
-    log "--- [17] Installing Trivy Operator on ${cluster} ---"
-    run "${SCRIPTS_DIR}/17-trivy-operator.sh" "${cluster}"
-  fi
-done
-
-# --- Step 18: KAITO AI Toolchain (app1, app2) ---
-for cluster in app1 app2; do
-  if [[ "${CLUSTER_TARGET}" == "all" || "${CLUSTER_TARGET}" == "${cluster}" ]]; then
-    log "--- [18] Installing KAITO on ${cluster} ---"
-    run "${SCRIPTS_DIR}/18-kaito.sh" "${cluster}"
   fi
 done
 

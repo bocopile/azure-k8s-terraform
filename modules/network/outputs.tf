@@ -37,3 +37,8 @@ output "pe_subnet_id" {
   description = "Private Endpoint subnet ID (mgmt VNet)"
   value       = azurerm_subnet.private_endpoint.id
 }
+
+output "nsg_aks_ids" {
+  description = "AKS NSG resource IDs by VNet key"
+  value       = { for k, v in azurerm_network_security_group.aks : k => v.id }
+}
