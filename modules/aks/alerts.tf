@@ -13,7 +13,7 @@ resource "azurerm_monitor_metric_alert" "cpu_high" {
   for_each = var.clusters
 
   name                = "alert-cpu-high-${each.key}"
-  resource_group_name = azurerm_resource_group.cluster[each.key].name
+  resource_group_name = var.rg_cluster[each.key]
   scopes              = [azurerm_kubernetes_cluster.aks[each.key].id]
   description         = "AKS ${each.key}: Node CPU 사용률이 90%를 초과했습니다."
   severity            = 2
@@ -37,7 +37,7 @@ resource "azurerm_monitor_metric_alert" "memory_high" {
   for_each = var.clusters
 
   name                = "alert-memory-high-${each.key}"
-  resource_group_name = azurerm_resource_group.cluster[each.key].name
+  resource_group_name = var.rg_cluster[each.key]
   scopes              = [azurerm_kubernetes_cluster.aks[each.key].id]
   description         = "AKS ${each.key}: Node Memory 사용률이 90%를 초과했습니다."
   severity            = 2
@@ -61,7 +61,7 @@ resource "azurerm_monitor_scheduled_query_rules_alert_v2" "crashloop" {
   for_each = var.clusters
 
   name                 = "alert-crashloop-${each.key}"
-  resource_group_name  = azurerm_resource_group.cluster[each.key].name
+  resource_group_name  = var.rg_cluster[each.key]
   location             = var.location
   scopes               = [var.log_analytics_workspace_id]
   description          = "AKS ${each.key}: Pod CrashLoopBackOff 감지"

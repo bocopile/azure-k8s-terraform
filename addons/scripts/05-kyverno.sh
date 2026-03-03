@@ -23,7 +23,7 @@ echo "[kyverno] Installing Kyverno on: ${CLUSTER}"
 KYVERNO_CHART_VERSION="3.7.1"
 NAMESPACE="kyverno"
 
-az aks get-credentials --resource-group "rg-k8s-demo-${CLUSTER}" \
+az aks get-credentials --resource-group "rg-${PREFIX:-k8s-demo}-${CLUSTER}" \
   --name "aks-${CLUSTER}" --overwrite-existing --only-show-errors
 
 helm repo add kyverno https://kyverno.github.io/kyverno --force-update
@@ -56,7 +56,7 @@ helm upgrade --install kyverno kyverno/kyverno \
   --set reportsController.resources.requests.memory=64Mi \
   --set reportsController.resources.limits.cpu=200m \
   --set reportsController.resources.limits.memory=128Mi \
-  --wait
+  --wait --timeout 10m
 
 # PDB — admission controller (가장 중요: webhook 가용성)
 cat <<EOF | kubectl apply -f -

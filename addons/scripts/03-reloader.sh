@@ -17,7 +17,7 @@ echo "[reloader] Installing Stakater Reloader on: ${CLUSTER}"
 RELOADER_VERSION="1.2.0"
 NAMESPACE="reloader"
 
-az aks get-credentials --resource-group "rg-k8s-demo-${CLUSTER}" \
+az aks get-credentials --resource-group "rg-${PREFIX:-k8s-demo}-${CLUSTER}" \
   --name "aks-${CLUSTER}" --overwrite-existing --only-show-errors
 
 helm repo add stakater https://stakater.github.io/stakater-charts --force-update
@@ -31,7 +31,7 @@ helm upgrade --install reloader stakater/reloader \
   --set reloader.deployment.resources.requests.memory=32Mi \
   --set reloader.deployment.resources.limits.cpu=100m \
   --set reloader.deployment.resources.limits.memory=64Mi \
-  --wait
+  --wait --timeout 10m
 
 # PDB
 cat <<EOF | kubectl apply -f -

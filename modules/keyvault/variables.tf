@@ -1,9 +1,11 @@
 variable "location" {
-  type = string
+  description = "Azure region"
+  type        = string
 }
 
 variable "rg_common" {
-  type = string
+  description = "Common resource group name"
+  type        = string
 }
 
 variable "name" {
@@ -32,7 +34,20 @@ variable "log_analytics_workspace_id" {
   default     = ""
 }
 
+variable "sku_name" {
+  description = "Key Vault SKU (standard or premium)"
+  type        = string
+  default     = "standard"
+}
+
+variable "purge_protection" {
+  description = "Enable Key Vault purge protection (true for prod)"
+  type        = bool
+  default     = false
+}
+
 variable "tags" {
-  type    = map(string)
-  default = {}
+  description = "Resource tags"
+  type        = map(string)
+  default     = {}
 }

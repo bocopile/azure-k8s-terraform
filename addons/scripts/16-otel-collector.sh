@@ -17,19 +17,20 @@ echo "[otel] Installing OpenTelemetry Collector on: ${CLUSTER}"
 OTEL_CHART_VERSION="0.116.0"
 NAMESPACE="otel-system"
 
-az aks get-credentials --resource-group "rg-k8s-demo-${CLUSTER}" \
+az aks get-credentials --resource-group "rg-${PREFIX:-k8s-demo}-${CLUSTER}" \
   --name "aks-${CLUSTER}" --overwrite-existing --only-show-errors
 
 # App Insights Connection String 가져오기
 APPINSIGHTS_CS=$(az monitor app-insights component show \
-  --resource-group "rg-k8s-demo-common" \
-  --app "appi-k8s-demo" \
+  --resource-group "rg-${PREFIX:-k8s-demo}-common" \
+  --app "appi-${PREFIX:-k8s-demo}" \
   --query "connectionString" --output tsv 2>/dev/null || echo "")
 
 if [[ -z "${APPINSIGHTS_CS}" ]]; then
-  echo "[otel] WARNING: App Insights connection string not found."
-  echo "[otel] Set APPINSIGHTS_CONNECTION_STRING manually in the Secret."
-  APPINSIGHTS_CS="PLACEHOLDER"
+  echo "[otel] ERROR: App Insights connection string not found." >&2
+  echo "[otel] Ensure 'appi-${PREFIX:-k8s-demo}' exists in 'rg-${PREFIX:-k8s-demo}-common'." >&2
+  echo "[otel] Or set APPINSIGHTS_CONNECTION_STRING env var before running." >&2
+  exit 1
 fi
 
 # Namespace + Secret 생성
@@ -38,6 +39,7 @@ kubectl create secret generic otel-appinsights \
   --namespace "${NAMESPACE}" \
   --from-literal=connection-string="${APPINSIGHTS_CS}" \
   --dry-run=client -o yaml | kubectl apply -f -
+# TODO: Migrate to ExternalSecret resource referencing Key Vault (02-external-secrets.sh)
 
 helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm-charts --force-update
 helm upgrade --install otel-collector open-telemetry/opentelemetry-collector \
@@ -62,7 +64,7 @@ helm upgrade --install otel-collector open-telemetry/opentelemetry-collector \
   --set "extraEnvs[0].name=APPINSIGHTS_CONNECTION_STRING" \
   --set "extraEnvs[0].valueFrom.secretKeyRef.name=otel-appinsights" \
   --set "extraEnvs[0].valueFrom.secretKeyRef.key=connection-string" \
-  --wait
+  --wait --timeout 10m
 
 # PDB
 cat <<EOF | kubectl apply -f -

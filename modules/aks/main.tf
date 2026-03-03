@@ -4,18 +4,6 @@
 # ============================================================
 
 # ============================================================
-# Resource Groups — one per cluster
-# ============================================================
-
-resource "azurerm_resource_group" "cluster" {
-  for_each = var.clusters
-
-  name     = var.rg_cluster[each.key]
-  location = var.location
-  tags     = var.tags
-}
-
-# ============================================================
 # AKS Clusters (for_each = all clusters)
 # ============================================================
 
@@ -24,12 +12,12 @@ resource "azurerm_kubernetes_cluster" "aks" {
 
   name                = "aks-${each.key}"
   location            = var.location
-  resource_group_name = azurerm_resource_group.cluster[each.key].name
+  resource_group_name = var.rg_cluster[each.key]
   dns_prefix          = "aks-${each.key}-${var.prefix}"
   kubernetes_version  = var.kubernetes_version
 
-  # AKS Standard Tier — 99.95% Control Plane SLA (ARCHITECTURE.md §4.2)
-  sku_tier = "Standard"
+  # AKS SKU Tier — Standard = 99.95% Control Plane SLA (ARCHITECTURE.md §4.2)
+  sku_tier = var.aks_sku_tier
 
   # Private cluster — API Server 공개 엔드포인트 없음 (ADR-021 / C15)
   private_cluster_enabled = true
@@ -60,14 +48,15 @@ resource "azurerm_kubernetes_cluster" "aks" {
   # --------------------------------------------------------
   default_node_pool {
     name       = "system"
-    node_count = 3
+    node_count = var.system_node_count
     vm_size    = var.vm_sizes["system"]
     zones      = var.zones
 
     vnet_subnet_id = var.subnet_ids[each.value.vnet_key]
 
     # System critical addons only (C6)
-    only_critical_addons_enabled = true
+    # azurerm v4.x: only_critical_addons_enabled deprecated → node_taints 사용
+    node_taints = ["CriticalAddonsOnly=true:NoSchedule"]
 
     upgrade_settings {
       max_surge = "33%"
@@ -86,12 +75,14 @@ resource "azurerm_kubernetes_cluster" "aks" {
     network_plugin      = "azure"
     network_plugin_mode = "overlay"
     network_data_plane  = "cilium"
+    pod_cidr            = "10.${each.key == "mgmt" ? 244 : each.key == "app1" ? 245 : 246}.0.0/16"
     load_balancer_sku   = "standard"
-    outbound_type       = "loadBalancer" # ADR-016: LB SNAT (NAT GW 미적용)
+    outbound_type       = "loadBalancer" # ADR-016: LB SNAT → TODO: NAT Gateway 도입 검토 (SNAT 포트 고갈 방지)
   }
 
   # --------------------------------------------------------
   # Container Insights (OMS Agent) — ADR-010
+  # TODO: OMS Agent deprecated → Azure Monitor Agent(AMA) + DCR 기반 전환 검토
   # --------------------------------------------------------
   oms_agent {
     log_analytics_workspace_id      = var.log_analytics_workspace_id
@@ -122,12 +113,10 @@ resource "azurerm_kubernetes_cluster" "aks" {
 
   # --------------------------------------------------------
   # Azure RBAC for Kubernetes + Disable local accounts
+  # azurerm v4.x: azure_active_directory_role_based_access_control deprecated
   # --------------------------------------------------------
-  azure_active_directory_role_based_access_control {
-    azure_rbac_enabled = true
-  }
-
-  local_account_disabled = true
+  role_based_access_control_enabled = true
+  local_account_disabled            = true
 
   # --------------------------------------------------------
   # Node Auto-Provisioning / Karpenter (ADR-007)
@@ -172,12 +161,11 @@ resource "azurerm_kubernetes_cluster_node_pool" "ingress" {
   name                  = "ingress"
   kubernetes_cluster_id = azurerm_kubernetes_cluster.aks[each.key].id
   vm_size               = var.vm_sizes["ingress"]
-  node_count            = 3
+  node_count            = var.ingress_node_count
   zones                 = var.zones
   vnet_subnet_id        = var.subnet_ids[each.value.vnet_key]
 
-  priority        = "Regular"
-  eviction_policy = null
+  priority = "Regular"
 
   # Taint: Istio Ingress Gateway 전용 (ARCHITECTURE.md §4.2)
   node_taints = ["dedicated=ingress:NoSchedule"]
@@ -228,7 +216,7 @@ resource "azurerm_kubernetes_cluster_node_pool" "ingress" {
 resource "azurerm_public_ip" "bastion" {
   name                = var.bastion_pip_name
   location            = var.location
-  resource_group_name = azurerm_resource_group.cluster["mgmt"].name
+  resource_group_name = lookup(var.rg_cluster, "mgmt", values(var.rg_cluster)[0])
   allocation_method   = "Static"
   sku                 = "Standard"
   zones               = var.zones
@@ -238,8 +226,8 @@ resource "azurerm_public_ip" "bastion" {
 resource "azurerm_bastion_host" "bastion" {
   name                = var.bastion_name
   location            = var.location
-  resource_group_name = azurerm_resource_group.cluster["mgmt"].name
-  sku                 = "Basic"
+  resource_group_name = lookup(var.rg_cluster, "mgmt", values(var.rg_cluster)[0])
+  sku                 = var.bastion_sku
   tags                = var.tags
 
   ip_configuration {
@@ -250,14 +238,14 @@ resource "azurerm_bastion_host" "bastion" {
 }
 
 # ============================================================
-# Jump VM (Standard_B2s, Linux, mgmt cluster RG, ADR-021)
+# Jump VM (Linux, mgmt cluster RG, ADR-021)
 # Private IP only — Bastion 경유 전용
 # ============================================================
 
 resource "azurerm_network_interface" "jumpbox" {
   name                = var.jumpbox_nic_name
   location            = var.location
-  resource_group_name = azurerm_resource_group.cluster["mgmt"].name
+  resource_group_name = lookup(var.rg_cluster, "mgmt", values(var.rg_cluster)[0])
   tags                = var.tags
 
   ip_configuration {
@@ -271,7 +259,7 @@ resource "azurerm_network_interface" "jumpbox" {
 resource "azurerm_linux_virtual_machine" "jumpbox" {
   name                = var.jumpbox_vm_name
   location            = var.location
-  resource_group_name = azurerm_resource_group.cluster["mgmt"].name
+  resource_group_name = lookup(var.rg_cluster, "mgmt", values(var.rg_cluster)[0])
   size                = var.vm_sizes["jumpbox"]
   admin_username      = var.jumpbox_admin_username
 
@@ -292,47 +280,52 @@ resource "azurerm_linux_virtual_machine" "jumpbox" {
     publisher = "Canonical"
     offer     = "0001-com-ubuntu-server-jammy"
     sku       = "22_04-lts-gen2"
-    version   = "latest"
+    version   = "22.04.202502110" # pinned for reproducibility (update periodically)
   }
 
   # Jump VM 초기화: kubectl, az cli, helm, kubelogin, k9s, kubent, istioctl
+  # NOTE: pinned versions for reproducibility. Update periodically.
   custom_data = base64encode(<<-EOF
     #!/bin/bash
     set -e
     export DEBIAN_FRONTEND=noninteractive
     apt-get update -qq
 
-    # Azure CLI
+    # Azure CLI (Microsoft signed package)
     curl -sL https://aka.ms/InstallAzureCLIDeb | bash
 
-    # kubectl + kubelogin
+    # kubectl + kubelogin (via az cli — uses Microsoft CDN)
     az aks install-cli --install-location /usr/local/bin/kubectl \
       --kubelogin-install-location /usr/local/bin/kubelogin || true
 
-    # Helm 3
-    curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+    # Helm 3 (pinned version)
+    HELM_VERSION="v3.17.3"
+    curl -fsSL "https://get.helm.sh/helm-$${HELM_VERSION}-linux-amd64.tar.gz" \
+      | tar -xz --strip-components=1 -C /usr/local/bin linux-amd64/helm
 
-    # k9s (터미널 K8s UI)
-    K9S_VERSION=$(curl -s https://api.github.com/repos/derailed/k9s/releases/latest | grep '"tag_name"' | cut -d'"' -f4)
+    # k9s (pinned version)
+    K9S_VERSION="v0.50.6"
     curl -fsSL "https://github.com/derailed/k9s/releases/download/$${K9S_VERSION}/k9s_Linux_amd64.tar.gz" \
       | tar -xz -C /usr/local/bin k9s
 
-    # kubent (deprecated API 탐지)
-    curl -fsSL https://github.com/doitintl/kube-no-trouble/releases/latest/download/kubent-linux-amd64.tar.gz \
+    # kubent (pinned version)
+    KUBENT_VERSION="0.7.3"
+    curl -fsSL "https://github.com/doitintl/kube-no-trouble/releases/download/$${KUBENT_VERSION}/kubent-$${KUBENT_VERSION}-linux-amd64.tar.gz" \
       | tar -xz -C /usr/local/bin
 
-    # istioctl
-    curl -sL https://istio.io/downloadIstio | ISTIO_VERSION=1.28.0 TARGET_ARCH=x86_64 sh -
+    # istioctl (pinned version)
+    ISTIO_VERSION="1.28.0"
+    curl -sL https://istio.io/downloadIstio | ISTIO_VERSION=$${ISTIO_VERSION} TARGET_ARCH=x86_64 sh -
     mv istio-*/bin/istioctl /usr/local/bin/istioctl
     rm -rf istio-*
 
-    # ~/.bashrc 편의 설정 (azureadmin 사용자)
-    cat >> /home/azureadmin/.bashrc <<'BASHRC'
-# AKS kubeconfig 자동 설정 aliases
-alias kc-mgmt='az aks get-credentials -g rg-k8s-demo-mgmt -n aks-mgmt --overwrite-existing'
-alias kc-app1='az aks get-credentials -g rg-k8s-demo-app1 -n aks-app1 --overwrite-existing'
-alias kc-app2='az aks get-credentials -g rg-k8s-demo-app2 -n aks-app2 --overwrite-existing'
-alias kc-all='kc-mgmt && kc-app1 && kc-app2'
+    # ~/.bashrc 편의 설정 (var.clusters 기반 동적 생성)
+    cat >> /home/${var.jumpbox_admin_username}/.bashrc <<'BASHRC'
+# AKS kubeconfig aliases (auto-generated)
+%{for name, _ in var.clusters~}
+alias kc-${name}='az aks get-credentials -g ${var.rg_cluster[name]} -n aks-${name} --overwrite-existing'
+%{endfor~}
+alias kc-all='${join(" && ", [for name, _ in var.clusters : "kc-${name}"])}'
 export KUBECONFIG=$HOME/.kube/config
 BASHRC
 

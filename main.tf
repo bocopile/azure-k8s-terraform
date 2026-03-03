@@ -54,6 +54,7 @@ provider "azurerm" {
   }
 }
 
+# azuread provider — Sentinel Data Connector + 향후 Entra ID 연동 대비
 provider "azuread" {
   tenant_id = var.tenant_id
 }
@@ -61,25 +62,35 @@ provider "azuread" {
 # ============================================================
 # Module calls
 # Dependency graph (단방향):
-#   network → monitoring → keyvault → identity → aks
-#             acr       ↗
-#             backup    (independent)
+#   resource_group → network → monitoring → keyvault → identity → aks
+#                    acr       ↗
+#                    backup    (independent)
 #   flow-logs.tf (root): network + monitoring outputs 참조
 #   federation.tf (root): identity + aks outputs 참조 (별도 파일)
 # ============================================================
 
+module "resource_group" {
+  source = "./modules/resource-group"
+
+  location   = local.location
+  rg_common  = local.rg_common
+  rg_cluster = local.rg_cluster
+  tags       = var.tags
+}
+
 module "network" {
   source = "./modules/network"
 
-  location            = local.location
-  prefix              = local.prefix
-  rg_common           = local.rg_common
+  location  = local.location
+  rg_common = local.rg_common
   vnets               = local.vnets
   aks_subnets         = local.aks_subnets
   bastion_subnet_cidr = local.bastion_subnet_cidr
   jumpbox_subnet_cidr = local.jumpbox_subnet_cidr
   pe_subnet_cidr      = local.pe_subnet_cidr
   tags                = var.tags
+
+  depends_on = [module.resource_group]
 }
 
 module "keyvault" {
@@ -89,12 +100,14 @@ module "keyvault" {
   rg_common                  = local.rg_common
   name                       = local.names.key_vault
   tenant_id                  = var.tenant_id
+  sku_name                   = var.keyvault_sku
+  purge_protection           = var.keyvault_purge_protection
   pe_subnet_id               = module.network.pe_subnet_id
   vnet_ids                   = module.network.vnet_ids
   log_analytics_workspace_id = module.monitoring.log_analytics_workspace_id
   tags                       = var.tags
 
-  depends_on = [module.network, module.monitoring]
+  depends_on = [module.resource_group, module.network, module.monitoring]
 }
 
 module "acr" {
@@ -103,10 +116,11 @@ module "acr" {
   location  = local.location
   rg_common = local.rg_common
   name      = local.names.acr
+  sku       = var.acr_sku
   tags      = var.tags
 
-  # 의존성 없음 — AcrPull role assignment는 identity 모듈에서 처리
-  depends_on = [module.network]
+  # 의존성: resource_group만 필요 (ACR은 network와 독립)
+  depends_on = [module.resource_group]
 }
 
 # identity는 acr + keyvault 이후 생성 (단방향)
@@ -123,7 +137,7 @@ module "identity" {
   dns_zone_id             = var.dns_zone_id
   tags                    = var.tags
 
-  depends_on = [module.network, module.acr, module.keyvault]
+  depends_on = [module.resource_group, module.network, module.acr, module.keyvault]
 }
 
 module "monitoring" {
@@ -137,22 +151,26 @@ module "monitoring" {
   grafana_name           = local.names.grafana
   enable_grafana         = var.enable_grafana
   enable_sentinel        = var.enable_sentinel
+  log_retention_days     = var.log_retention_days
+  grafana_public_access  = var.grafana_public_access
+  grafana_sku            = var.grafana_sku
   tags                   = var.tags
 
-  depends_on = [module.network]
+  depends_on = [module.resource_group]
 }
 
 module "backup" {
   source = "./modules/backup"
 
-  location           = local.location
-  rg_common          = local.rg_common
-  vault_name         = local.names.backup_vault
-  policy_name        = local.names.backup_policy
-  enable_soft_delete = false # Demo: 즉시 삭제 허용 (prod 전환 시 true)
-  tags               = var.tags
+  location                  = local.location
+  rg_common                 = local.rg_common
+  vault_name                = local.names.backup_vault
+  policy_name               = local.names.backup_policy
+  enable_soft_delete        = var.backup_soft_delete
+  backup_retention_duration = var.backup_retention_duration
+  tags                      = var.tags
 
-  depends_on = [module.network]
+  depends_on = [module.resource_group]
 }
 
 module "aks" {
@@ -188,8 +206,10 @@ module "aks" {
   jumpbox_private_ip     = local.jumpbox_private_ip
   bastion_name           = local.names.bastion
   bastion_pip_name       = local.names.bastion_pip
+  aks_sku_tier           = var.aks_sku_tier
+  bastion_sku            = var.bastion_sku
 
   tags = var.tags
 
-  depends_on = [module.network, module.identity, module.monitoring]
+  depends_on = [module.resource_group, module.network, module.identity, module.monitoring]
 }

@@ -35,3 +35,8 @@ output "grafana_endpoint" {
   description = "Azure Managed Grafana endpoint URL"
   value       = var.enable_grafana ? azurerm_dashboard_grafana.grafana[0].endpoint : ""
 }
+
+output "log_analytics_workspace_name" {
+  description = "Log Analytics Workspace name"
+  value       = azurerm_log_analytics_workspace.law.name
+}

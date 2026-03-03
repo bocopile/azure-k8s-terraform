@@ -28,11 +28,11 @@ for CLUSTER in "${CLUSTERS[@]}"; do
   log "Checking cluster: aks-${CLUSTER}"
   log "============================================"
 
-  az aks get-credentials --resource-group "rg-k8s-demo-${CLUSTER}" \
+  az aks get-credentials --resource-group "rg-${PREFIX:-k8s-demo}-${CLUSTER}" \
     --name "aks-${CLUSTER}" --overwrite-existing --only-show-errors 2>/dev/null
 
   # --- 1. 노드 상태 ---
-  NOT_READY=$(kubectl get nodes --no-headers 2>/dev/null | grep -v " Ready " | wc -l || echo "99")
+  NOT_READY=$(kubectl get nodes --no-headers 2>/dev/null | awk '$2 != "Ready"' | wc -l || echo "99")
   if [[ "${NOT_READY}" -eq 0 ]]; then
     ok "All nodes Ready"
   else

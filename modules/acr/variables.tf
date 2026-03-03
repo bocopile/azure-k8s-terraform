@@ -1,9 +1,11 @@
 variable "location" {
-  type = string
+  description = "Azure region"
+  type        = string
 }
 
 variable "rg_common" {
-  type = string
+  description = "Common resource group name"
+  type        = string
 }
 
 variable "name" {
@@ -11,7 +13,14 @@ variable "name" {
   type        = string
 }
 
+variable "sku" {
+  description = "ACR SKU (Basic, Standard, or Premium)"
+  type        = string
+  default     = "Basic"
+}
+
 variable "tags" {
-  type    = map(string)
-  default = {}
+  description = "Resource tags"
+  type        = map(string)
+  default     = {}
 }

@@ -17,7 +17,7 @@ echo "[eso] Installing External Secrets Operator on: ${CLUSTER}"
 ESO_VERSION="0.10.5"
 NAMESPACE="external-secrets"
 
-az aks get-credentials --resource-group "rg-k8s-demo-${CLUSTER}" \
+az aks get-credentials --resource-group "rg-${PREFIX:-k8s-demo}-${CLUSTER}" \
   --name "aks-${CLUSTER}" --overwrite-existing --only-show-errors
 
 helm repo add external-secrets https://charts.external-secrets.io --force-update
@@ -46,7 +46,7 @@ helm upgrade --install external-secrets external-secrets/external-secrets \
   --set certController.resources.requests.memory=64Mi \
   --set certController.resources.limits.cpu=100m \
   --set certController.resources.limits.memory=128Mi \
-  --wait
+  --wait --timeout 10m
 
 # HPA — ESO controller
 cat <<'EOF' | kubectl apply -f -

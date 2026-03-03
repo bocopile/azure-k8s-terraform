@@ -107,7 +107,6 @@ variable "jumpbox_admin_username" {
 variable "jumpbox_ssh_public_key" {
   description = "SSH public key for the jump VM"
   type        = string
-  sensitive   = true
 }
 
 variable "jumpbox_vm_name" {
@@ -126,8 +125,11 @@ variable "jumpbox_private_ip" {
   default     = "10.1.1.10"
 
   validation {
-    condition     = can(cidrhost("10.1.1.0/24", 0)) && can(regex("^10\\.1\\.1\\.", var.jumpbox_private_ip))
-    error_message = "jumpbox_private_ip must be within 10.1.1.0/24 (e.g. 10.1.1.10)."
+    condition = alltrue([
+      can(regex("^(\\d{1,3}\\.){3}\\d{1,3}$", var.jumpbox_private_ip)),
+      alltrue([for octet in split(".", var.jumpbox_private_ip) : tonumber(octet) >= 0 && tonumber(octet) <= 255])
+    ])
+    error_message = "jumpbox_private_ip must be a valid IPv4 address with octets 0-255 (e.g. 10.1.1.10)."
   }
 }
 
@@ -139,6 +141,30 @@ variable "bastion_name" {
 variable "bastion_pip_name" {
   description = "Azure Bastion Public IP name"
   type        = string
+}
+
+variable "aks_sku_tier" {
+  description = "AKS SKU tier (Free or Standard)"
+  type        = string
+  default     = "Standard"
+}
+
+variable "bastion_sku" {
+  description = "Azure Bastion SKU (Basic or Standard)"
+  type        = string
+  default     = "Basic"
+}
+
+variable "system_node_count" {
+  description = "Number of nodes in the system node pool"
+  type        = number
+  default     = 3
+}
+
+variable "ingress_node_count" {
+  description = "Number of nodes in the ingress node pool"
+  type        = number
+  default     = 3
 }
 
 variable "tags" {

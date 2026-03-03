@@ -13,7 +13,7 @@ CLUSTER="${1:?cluster name required}"
 
 echo "[hubble] Enabling Cilium Hubble on: ${CLUSTER}"
 
-RG="rg-k8s-demo-${CLUSTER}"
+RG="rg-${PREFIX:-k8s-demo}-${CLUSTER}"
 CLUSTER_NAME="aks-${CLUSTER}"
 
 az aks get-credentials --resource-group "${RG}" \

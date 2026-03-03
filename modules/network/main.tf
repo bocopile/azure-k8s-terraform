@@ -3,13 +3,6 @@
 # VNets, Subnets, NSGs, VNet Peering (full mesh)
 # ============================================================
 
-# --- Common resource group (shared infra) ---
-resource "azurerm_resource_group" "common" {
-  name     = var.rg_common
-  location = var.location
-  tags     = var.tags
-}
-
 # ============================================================
 # Virtual Networks
 # ============================================================
@@ -19,7 +12,7 @@ resource "azurerm_virtual_network" "vnet" {
 
   name                = "vnet-${each.key}"
   location            = var.location
-  resource_group_name = azurerm_resource_group.common.name
+  resource_group_name = var.rg_common
   address_space       = [each.value.cidr]
   tags                = var.tags
 }
@@ -32,7 +25,7 @@ resource "azurerm_subnet" "aks" {
   for_each = var.vnets
 
   name                 = "snet-aks-${each.key}"
-  resource_group_name  = azurerm_resource_group.common.name
+  resource_group_name  = var.rg_common
   virtual_network_name = azurerm_virtual_network.vnet[each.key].name
   address_prefixes     = [var.aks_subnets[each.key]]
 }
@@ -44,14 +37,14 @@ resource "azurerm_subnet" "aks" {
 # Azure requires exactly "AzureBastionSubnet" as the name
 resource "azurerm_subnet" "bastion" {
   name                 = "AzureBastionSubnet"
-  resource_group_name  = azurerm_resource_group.common.name
+  resource_group_name  = var.rg_common
   virtual_network_name = azurerm_virtual_network.vnet["mgmt"].name
   address_prefixes     = [var.bastion_subnet_cidr]
 }
 
 resource "azurerm_subnet" "jumpbox" {
   name                 = "snet-jumpbox"
-  resource_group_name  = azurerm_resource_group.common.name
+  resource_group_name  = var.rg_common
   virtual_network_name = azurerm_virtual_network.vnet["mgmt"].name
   address_prefixes     = [var.jumpbox_subnet_cidr]
 }
@@ -60,7 +53,7 @@ resource "azurerm_subnet" "jumpbox" {
 # Private Endpoint 서브넷에는 NSG 적용하지 않음 (Azure 권장)
 resource "azurerm_subnet" "private_endpoint" {
   name                 = "snet-private-endpoints"
-  resource_group_name  = azurerm_resource_group.common.name
+  resource_group_name  = var.rg_common
   virtual_network_name = azurerm_virtual_network.vnet["mgmt"].name
   address_prefixes     = [var.pe_subnet_cidr]
 }
@@ -74,7 +67,7 @@ resource "azurerm_network_security_group" "aks" {
 
   name                = "nsg-aks-${each.key}"
   location            = var.location
-  resource_group_name = azurerm_resource_group.common.name
+  resource_group_name = var.rg_common
   tags                = var.tags
 
   # Allow AKS control plane inbound (required for managed AKS)
@@ -121,7 +114,7 @@ resource "azurerm_network_security_group" "aks" {
 resource "azurerm_network_security_group" "bastion" {
   name                = "nsg-bastion"
   location            = var.location
-  resource_group_name = azurerm_resource_group.common.name
+  resource_group_name = var.rg_common
   tags                = var.tags
 
   # Required inbound: HTTPS from Internet
@@ -220,7 +213,7 @@ resource "azurerm_network_security_group" "bastion" {
 resource "azurerm_network_security_group" "jumpbox" {
   name                = "nsg-jumpbox"
   location            = var.location
-  resource_group_name = azurerm_resource_group.common.name
+  resource_group_name = var.rg_common
   tags                = var.tags
 
   # Allow SSH from Bastion subnet only
@@ -276,14 +269,18 @@ resource "azurerm_subnet_network_security_group_association" "jumpbox" {
 # ============================================================
 
 locals {
-  # Generate all ordered pairs for full-mesh peering
+  # Generate all ordered pairs for full-mesh peering (dynamic from var.vnets)
+  vnet_keys = keys(var.vnets)
   peering_pairs = {
-    "mgmt-to-app1" = { src = "mgmt", dst = "app1" }
-    "app1-to-mgmt" = { src = "app1", dst = "mgmt" }
-    "mgmt-to-app2" = { src = "mgmt", dst = "app2" }
-    "app2-to-mgmt" = { src = "app2", dst = "mgmt" }
-    "app1-to-app2" = { src = "app1", dst = "app2" }
-    "app2-to-app1" = { src = "app2", dst = "app1" }
+    for pair in flatten([
+      for src in local.vnet_keys : [
+        for dst in local.vnet_keys : {
+          key = "${src}-to-${dst}"
+          src = src
+          dst = dst
+        } if src != dst
+      ]
+    ]) : pair.key => { src = pair.src, dst = pair.dst }
   }
 }
 
@@ -295,7 +292,7 @@ locals {
 
 resource "azurerm_private_dns_zone" "aks" {
   name                = "privatelink.${var.location}.azmk8s.io"
-  resource_group_name = azurerm_resource_group.common.name
+  resource_group_name = var.rg_common
   tags                = var.tags
 }
 
@@ -303,7 +300,7 @@ resource "azurerm_private_dns_zone_virtual_network_link" "aks" {
   for_each = var.vnets
 
   name                  = "dnslink-aks-${each.key}"
-  resource_group_name   = azurerm_resource_group.common.name
+  resource_group_name   = var.rg_common
   private_dns_zone_name = azurerm_private_dns_zone.aks.name
   virtual_network_id    = azurerm_virtual_network.vnet[each.key].id
   registration_enabled  = false
@@ -314,7 +311,7 @@ resource "azurerm_virtual_network_peering" "mesh" {
   for_each = local.peering_pairs
 
   name                      = "peer-${each.key}"
-  resource_group_name       = azurerm_resource_group.common.name
+  resource_group_name       = var.rg_common
   virtual_network_name      = azurerm_virtual_network.vnet[each.value.src].name
   remote_virtual_network_id = azurerm_virtual_network.vnet[each.value.dst].id
 

@@ -68,13 +68,14 @@ Azure 관리형 서비스를 최대한 활용하고, Spot VM + NAP(Karpenter)으
 .
 ├── main.tf                  # Provider 설정 + 모듈 오케스트레이션
 ├── locals.tf                # 공통 로컬 값 (리전, CIDR, 이름 등)
-├── variables.tf             # 전역 유니크 필수 입력 변수
+├── variables.tf             # 입력 변수 (필수 + 환경별 선택)
 ├── outputs.tf               # 루트 레벨 출력
 ├── federation.tf            # Workload Identity Federated Credentials
 ├── flow-logs.tf             # NSG Flow Logs + Traffic Analytics
 ├── terraform.tfvars.example # 변수 입력 예시
 │
 ├── modules/
+│   ├── resource-group/      # Resource Group 생성 (공통 + 클러스터별)
 │   ├── network/             # VNet · Subnet · NSG · Peering · Private DNS Zone
 │   ├── identity/            # Managed Identity + Role Assignments
 │   ├── keyvault/            # Key Vault (Private Endpoint + RBAC)
@@ -89,7 +90,7 @@ Azure 관리형 서비스를 최대한 활용하고, Spot VM + NAP(Karpenter)으
 │
 ├── addons/
 │   ├── install.sh           # Phase 2 진입점
-│   └── scripts/             # 16개 애드온 설치 스크립트
+│   └── scripts/             # 19개 애드온 설치 스크립트
 │
 └── document/azure/          # 아키텍처 문서
     ├── ARCHITECTURE.md
@@ -100,13 +101,14 @@ Azure 관리형 서비스를 최대한 활용하고, Spot VM + NAP(Karpenter)으
 ### 모듈 의존성 그래프
 
 ```
-network
-  ├── monitoring
-  │     └── keyvault
-  ├── acr
-  ├── (keyvault)
-  └── identity ──────► aks
-                         └── federation.tf (루트, AKS 생성 후)
+resource-group
+  └── network
+        ├── monitoring
+        │     └── keyvault
+        ├── acr (독립)
+        ├── backup (독립)
+        └── identity ──────► aks
+                               └── federation.tf (루트, AKS 생성 후)
 ```
 
 ---
@@ -116,15 +118,20 @@ network
 ### 필수 도구
 
 ```bash
-# OpenTofu 설치 (macOS)
-brew install opentofu
-
-# Azure CLI
+# Phase 1 (인프라 배포)
+brew install opentofu        # >= 1.11.0
 brew install azure-cli
+
+# Phase 2 (애드온 설치 — Jump VM 또는 로컬 환경)
+brew install kubectl
+brew install helm
+brew install azure/kubelogin/kubelogin
 
 # 버전 확인
 tofu version      # >= 1.11.0
 az version
+kubectl version --client
+helm version
 ```
 
 ### Azure 연결
@@ -207,7 +214,7 @@ az aks get-versions --location koreacentral \
   --query "orchestrators[].orchestratorVersion" -o table
 ```
 
-`locals.tf`의 `kubernetes_version`이 가용 버전 목록에 있는지 확인합니다.
+`variables.tf`의 `kubernetes_version` 기본값(또는 `terraform.tfvars` 오버라이드)이 가용 버전 목록에 있는지 확인합니다.
 
 ### 3. 초기화 및 배포
 
@@ -250,11 +257,14 @@ cd ~/azure-k8s-terraform
 # 특정 클러스터만
 ./addons/install.sh --cluster mgmt
 
+# 커스텀 prefix + location 사용 (기본값: k8s-demo / koreacentral)
+./addons/install.sh --cluster all --prefix my-project --location koreacentral
+
 # Dry-run (실제 설치 없이 확인)
 ./addons/install.sh --cluster all --dry-run
 ```
 
-### 설치 순서 (16개 스크립트)
+### 설치 순서 (19개 스크립트, 14번은 최종 검증으로 마지막 실행)
 
 | 단계 | 스크립트 | 내용 |
 |---|---|---|
@@ -268,12 +278,15 @@ cd ~/azure-k8s-terraform
 | 06 | `06-flux.sh` | Flux v2 GitOps |
 | 07 | `07-kiali.sh` | Kiali 서비스 메시 대시보드 v2.21 |
 | 08 | `08-karpenter-nodepool.sh` | NAP NodePool CRD (cpu≤20, mem≤40Gi) |
-| 09 | `09-backup-extension.sh` | AKS Backup Extension |
-| 10 | `10-defender.sh` | Defender for Containers |
-| 11 | `11-budget-alert.sh` | 예산 알림 |
-| 12 | `12-aks-automation.sh` | AKS Automation |
-| 13 | `13-hubble.sh` | Cilium Hubble UI |
-| 14 | `14-verify-clusters.sh` | 설치 검증 |
+| 09 | `09-backup-extension.sh` | AKS Backup Extension (BackupInstance는 수동) |
+| 10 | `10-defender.sh` | Defender for Containers 검증 |
+| 11 | `11-budget-alert.sh` | 예산 알림 ($250/월) |
+| 12 | `12-aks-automation.sh` | AKS Stop/Start 자동화 (STUB — 미구현) |
+| 13 | `13-hubble.sh` | Cilium Hubble UI + Relay |
+| 15 | `15-tetragon.sh` | Cilium Tetragon (eBPF 런타임 보안) |
+| 16 | `16-otel-collector.sh` | OpenTelemetry Collector (분산 트레이싱) |
+| 19 | `19-vpa.sh` | Vertical Pod Autoscaler (recommend-only) |
+| 14 | `14-verify-clusters.sh` | 설치 검증 (항상 마지막) |
 
 ---
 
@@ -291,6 +304,23 @@ cd ~/azure-k8s-terraform
 | `enable_sentinel` | ❌ | `false` | Microsoft Sentinel 활성화 |
 | `dns_zone_id` | ❌ | `""` | cert-manager DNS-01용 Azure DNS Zone ID |
 | `tags` | ❌ | project/env/managed_by | 공통 리소스 태그 |
+| `location` | ❌ | `koreacentral` | Azure 리전 |
+| `prefix` | ❌ | `k8s-demo` | 리소스 이름 접두사 |
+| `kubernetes_version` | ❌ | `1.34` | AKS Kubernetes 버전 |
+| `vm_size_system` | ❌ | `Standard_D2s_v5` | System 노드풀 VM SKU |
+| `vm_size_ingress` | ❌ | `Standard_D2s_v5` | Ingress 노드풀 VM SKU |
+| `vm_size_jumpbox` | ❌ | `Standard_B2s` | Jump VM SKU |
+| `aks_sku_tier` | ❌ | `Standard` | AKS SKU 티어 (Free / Standard) |
+| `acr_sku` | ❌ | `Basic` | ACR SKU (Basic / Standard / Premium) |
+| `bastion_sku` | ❌ | `Basic` | Azure Bastion SKU (Basic / Standard) |
+| `keyvault_sku` | ❌ | `standard` | Key Vault SKU (standard / premium) |
+| `log_retention_days` | ❌ | `30` | Log Analytics 보존 기간 (일) |
+| `flow_log_retention_days` | ❌ | `30` | NSG Flow Log 보존 기간 (일) |
+| `backup_retention_duration` | ❌ | `P7D` | Backup Vault 보존 기간 (ISO 8601) |
+| `keyvault_purge_protection` | ❌ | `true` | Key Vault Purge Protection 활성화 (demo: false) |
+| `grafana_public_access` | ❌ | `false` | Grafana Public 접근 허용 (demo: true) |
+| `grafana_sku` | ❌ | `Standard` | Grafana SKU (Standard / Essential) |
+| `backup_soft_delete` | ❌ | `false` | Backup Vault Soft Delete (prod: true 권장) |
 
 ---
 
@@ -382,6 +412,19 @@ rm terraform.tfstate terraform.tfstate.backup
 
 ---
 
+## 트러블슈팅
+
+| 증상 | 원인 | 해결 |
+|---|---|---|
+| `tofu apply` 시 Network Watcher 충돌 | Azure가 VNet 생성 시 자동 생성 | `tofu import azurerm_network_watcher.nw /subscriptions/.../NetworkWatcher_koreacentral` |
+| Key Vault 이름 충돌 (`SoftDeleted`) | 이전 삭제 후 soft-delete 상태 잔존 | `az keyvault purge --name <kv-name>` |
+| AKS 버전 미지원 | 리전별 가용 버전 상이 | `az aks get-versions --location koreacentral` 확인 |
+| VM 할당량 초과 | 구독별 vCPU 할당량 제한 | `az vm list-usage --location koreacentral -o table` 확인 후 할당량 증가 요청 |
+| Private Cluster API 접근 불가 | Jump VM 또는 VPN 경유 필요 | Azure Bastion → Jump VM으로 접속 후 kubectl 사용 |
+| Addon 스크립트 prefix 불일치 | `install.sh --prefix`와 Terraform `var.prefix` 불일치 | 동일 prefix 값 사용 필수 |
+
+---
+
 ## 참고 문서
 
 | 문서 | 내용 |
@@ -389,4 +432,5 @@ rm terraform.tfstate terraform.tfstate.backup
 | [`document/azure/ARCHITECTURE.md`](document/azure/ARCHITECTURE.md) | 전체 아키텍처 설계 (v3.2.0) |
 | [`document/azure/DIAGRAMS.md`](document/azure/DIAGRAMS.md) | Mermaid 아키텍처 다이어그램 |
 | [`document/azure/IaC-REVIEW.md`](document/azure/IaC-REVIEW.md) | IaC 구현 검토 및 개선 계획 |
+| [`document/azure/PROMPT.md`](document/azure/PROMPT.md) | 프로젝트 설계 프롬프트 |
 | [`terraform.tfvars.example`](terraform.tfvars.example) | 변수 입력 예시 |

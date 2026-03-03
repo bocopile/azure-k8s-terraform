@@ -17,7 +17,7 @@ GATEWAY_API_VERSION="v1.3.0"
 
 echo "[gateway-api] Installing Gateway API CRDs (${GATEWAY_API_VERSION}) on: ${CLUSTER}"
 
-az aks get-credentials --resource-group "rg-k8s-demo-${CLUSTER}" \
+az aks get-credentials --resource-group "rg-${PREFIX:-k8s-demo}-${CLUSTER}" \
   --name "aks-${CLUSTER}" --overwrite-existing --only-show-errors
 
 # Standard channel CRDs (HTTPRoute, GRPCRoute, Gateway, GatewayClass 포함)

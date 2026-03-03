@@ -3,11 +3,6 @@ variable "location" {
   type        = string
 }
 
-variable "prefix" {
-  description = "Naming prefix for all resources"
-  type        = string
-}
-
 variable "rg_common" {
   description = "Common resource group name"
   type        = string

@@ -21,6 +21,37 @@ jumpbox_ssh_public_key = "ssh-rsa AAAA... your-public-key-here"
 # DNS Zone for cert-manager DNS-01 challenge (optional, leave empty to skip)
 # dns_zone_id = "/subscriptions/.../resourceGroups/.../providers/Microsoft.Network/dnsZones/example.com"
 
+# --- 환경 설정 (기본값이 있어 선택 사항) ---
+# location              = "koreacentral"
+# prefix                = "k8s-demo"
+# kubernetes_version    = "1.34"
+
+# --- VM SKU ---
+# vm_size_system        = "Standard_D2s_v5"
+# vm_size_ingress       = "Standard_D2s_v5"
+# vm_size_jumpbox       = "Standard_B2s"
+
+# --- SKU / Tier ---
+# aks_sku_tier          = "Standard"     # Free | Standard
+# acr_sku               = "Basic"        # Basic | Standard | Premium
+# bastion_sku           = "Basic"        # Basic | Standard
+# keyvault_sku          = "standard"     # standard | premium
+
+# --- 보존기간 ---
+# log_retention_days        = 30
+# flow_log_retention_days   = 30
+# backup_retention_duration = "P7D"
+
+# --- 보안 ---
+# keyvault_purge_protection = true       # 기본값: true (demo: false로 override)
+# grafana_public_access     = false      # 기본값: false (demo: true로 override)
+# grafana_sku               = "Standard" # Standard | Essential
+# backup_soft_delete        = false      # 기본값: false (prod: true 권장)
+
+# --- 관측성 ---
+# enable_grafana            = true
+# enable_sentinel           = false
+
 # Resource tags
 tags = {
   project     = "azure-k8s-demo"

@@ -1,8 +1,3 @@
-output "resource_group_names" {
-  description = "AKS cluster resource group names by key"
-  value       = { for k, v in azurerm_resource_group.cluster : k => v.name }
-}
-
 output "cluster_ids" {
   description = "AKS cluster resource IDs by key"
   value       = { for k, v in azurerm_kubernetes_cluster.aks : k => v.id }
@@ -32,4 +27,14 @@ output "jumpbox_private_ip" {
 output "bastion_dns_name" {
   description = "Azure Bastion DNS name"
   value       = azurerm_bastion_host.bastion.dns_name
+}
+
+output "bastion_host_name" {
+  description = "Azure Bastion host name"
+  value       = azurerm_bastion_host.bastion.name
+}
+
+output "jumpbox_vm_name" {
+  description = "Jump VM name"
+  value       = azurerm_linux_virtual_machine.jumpbox.name
 }

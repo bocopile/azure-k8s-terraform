@@ -11,13 +11,13 @@ resource "azurerm_key_vault" "kv" {
   location            = var.location
   resource_group_name = var.rg_common
   tenant_id           = var.tenant_id
-  sku_name            = "standard"
+  sku_name            = var.sku_name
 
   # RBAC authorization (access policy 방식 미사용, 최신 권장)
   enable_rbac_authorization = true
 
   soft_delete_retention_days = 90
-  purge_protection_enabled   = false # Demo: 재생성 편의를 위해 비활성
+  purge_protection_enabled   = var.purge_protection
 
   # Private Endpoint 구성 후 공개 접근 차단 (ARCHITECTURE.md §5.6)
   public_network_access_enabled = false
@@ -33,9 +33,10 @@ resource "azurerm_key_vault" "kv" {
 # 배포 주체에 Key Vault Administrator 부여
 # (Terraform이 시크릿/키 작성에 필요)
 resource "azurerm_role_assignment" "deployer_kv_admin" {
-  principal_id         = data.azurerm_client_config.current.object_id
-  role_definition_name = "Key Vault Administrator"
-  scope                = azurerm_key_vault.kv.id
+  principal_id                     = data.azurerm_client_config.current.object_id
+  role_definition_name             = "Key Vault Administrator"
+  scope                            = azurerm_key_vault.kv.id
+  skip_service_principal_aad_check = true
 }
 
 # ============================================================

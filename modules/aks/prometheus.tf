@@ -11,7 +11,7 @@ resource "azurerm_monitor_data_collection_endpoint" "prometheus" {
 
   name                          = "MSProm-DCE-${var.location}-${each.key}"
   location                      = var.location
-  resource_group_name           = azurerm_resource_group.cluster[each.key].name
+  resource_group_name           = var.rg_cluster[each.key]
   kind                          = "Linux"
   public_network_access_enabled = false
 
@@ -24,7 +24,7 @@ resource "azurerm_monitor_data_collection_rule" "prometheus" {
 
   name                        = "MSProm-DCR-${var.location}-${each.key}"
   location                    = var.location
-  resource_group_name         = azurerm_resource_group.cluster[each.key].name
+  resource_group_name         = var.rg_cluster[each.key]
   data_collection_endpoint_id = azurerm_monitor_data_collection_endpoint.prometheus[each.key].id
   kind                        = "Linux"
 

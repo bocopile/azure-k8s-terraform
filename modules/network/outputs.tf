@@ -1,13 +1,3 @@
-output "common_resource_group_name" {
-  description = "Common resource group name"
-  value       = azurerm_resource_group.common.name
-}
-
-output "common_resource_group_id" {
-  description = "Common resource group ID"
-  value       = azurerm_resource_group.common.id
-}
-
 output "vnet_ids" {
   description = "VNet resource IDs by key"
   value       = { for k, v in azurerm_virtual_network.vnet : k => v.id }

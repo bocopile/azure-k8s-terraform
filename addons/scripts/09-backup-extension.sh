@@ -13,12 +13,10 @@ CLUSTER="${1:?cluster name required}"
 
 echo "[backup] Installing AKS Backup Extension on: ${CLUSTER}"
 
-RG="rg-k8s-demo-${CLUSTER}"
+RG="rg-${PREFIX:-k8s-demo}-${CLUSTER}"
 CLUSTER_NAME="aks-${CLUSTER}"
-COMMON_RG="rg-k8s-demo-common"
-VAULT_NAME="bv-k8s-demo"
-POLICY_NAME="bp-aks-daily"
-
+COMMON_RG="rg-${PREFIX:-k8s-demo}-common"
+VAULT_NAME="bv-${PREFIX:-k8s-demo}"
 # Install AKS Backup Extension
 az k8s-extension create \
   --resource-group "${RG}" \
@@ -30,8 +28,17 @@ az k8s-extension create \
   --auto-upgrade-minor-version true
 
 echo "[backup] ✓ AKS Backup Extension installed on ${CLUSTER}"
-echo "[backup] TODO: Create BackupInstance to associate cluster with Vault"
-echo "[backup]   az dataprotection backup-instance create \\"
-echo "[backup]     --resource-group ${COMMON_RG} \\"
-echo "[backup]     --vault-name ${VAULT_NAME} \\"
-echo "[backup]     --backup-instance <backup-instance.json>"
+
+# Wait for extension to be ready
+echo "[backup] Waiting for extension to be ready..."
+az k8s-extension show \
+  --resource-group "${RG}" \
+  --cluster-name "${CLUSTER_NAME}" \
+  --cluster-type managedClusters \
+  --name azure-aks-backup \
+  --query "provisioningState" --output tsv
+
+echo "[backup] NOTE: BackupInstance creation requires manual configuration."
+echo "[backup] See: az dataprotection backup-instance create"
+echo "[backup]   --resource-group ${COMMON_RG}"
+echo "[backup]   --vault-name ${VAULT_NAME}"

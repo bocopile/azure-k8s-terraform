@@ -12,7 +12,7 @@ set -euo pipefail
 echo "[budget] Creating Azure Budget Alert ($250/month)"
 
 SUBSCRIPTION_ID="${AZURE_SUBSCRIPTION_ID:?Set AZURE_SUBSCRIPTION_ID env var}"
-BUDGET_NAME="budget-k8s-demo"
+BUDGET_NAME="budget-${PREFIX:-k8s-demo}"
 ALERT_EMAIL="${BUDGET_ALERT_EMAIL:?Set BUDGET_ALERT_EMAIL env var}"
 AMOUNT=250
 

@@ -13,7 +13,7 @@ resource "azurerm_log_analytics_workspace" "law" {
   location            = var.location
   resource_group_name = var.rg_common
   sku                 = "PerGB2018"
-  retention_in_days   = 30
+  retention_in_days   = var.log_retention_days
 
   tags = var.tags
 }
@@ -83,8 +83,8 @@ resource "azurerm_dashboard_grafana" "grafana" {
   location                      = var.location
   resource_group_name           = var.rg_common
   grafana_major_version         = "10"
-  sku                           = "Standard"
-  public_network_access_enabled = true
+  sku                           = var.grafana_sku
+  public_network_access_enabled = var.grafana_public_access
   zone_redundancy_enabled       = false
 
   identity {

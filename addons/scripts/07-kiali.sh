@@ -21,7 +21,7 @@ echo "[kiali] Installing Kiali v2.21 on: ${CLUSTER}"
 KIALI_VERSION="2.21.0"
 NAMESPACE="kiali-operator"
 
-az aks get-credentials --resource-group "rg-k8s-demo-${CLUSTER}" \
+az aks get-credentials --resource-group "rg-${PREFIX:-k8s-demo}-${CLUSTER}" \
   --name "aks-${CLUSTER}" --overwrite-existing --only-show-errors
 
 helm repo add kiali https://kiali.org/helm-charts --force-update
@@ -34,6 +34,6 @@ helm upgrade --install kiali-operator kiali/kiali-operator \
   --set resources.requests.memory=64Mi \
   --set resources.limits.cpu=200m \
   --set resources.limits.memory=256Mi \
-  --wait
+  --wait --timeout 10m
 
 echo "[kiali] ✓ Kiali operator v${KIALI_VERSION} installed on ${CLUSTER}"

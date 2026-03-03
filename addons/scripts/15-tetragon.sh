@@ -8,6 +8,8 @@
 #
 # Usage: ./15-tetragon.sh <cluster-name>
 # ============================================================
+# WARNING: AKS with managed Cilium may conflict with standalone Tetragon.
+# Verify compatibility before deploying. Consider using AKS native Tetragon if available.
 set -euo pipefail
 CLUSTER="${1:?cluster name required}"
 
@@ -16,7 +18,7 @@ echo "[tetragon] Installing Cilium Tetragon on: ${CLUSTER}"
 TETRAGON_VERSION="1.4.0"
 NAMESPACE="kube-system"
 
-az aks get-credentials --resource-group "rg-k8s-demo-${CLUSTER}" \
+az aks get-credentials --resource-group "rg-${PREFIX:-k8s-demo}-${CLUSTER}" \
   --name "aks-${CLUSTER}" --overwrite-existing --only-show-errors
 
 helm repo add cilium https://helm.cilium.io --force-update
@@ -31,6 +33,6 @@ helm upgrade --install tetragon cilium/tetragon \
   --set tetragon.resources.requests.memory=64Mi \
   --set tetragon.resources.limits.cpu=200m \
   --set tetragon.resources.limits.memory=256Mi \
-  --wait
+  --wait --timeout 10m
 
 echo "[tetragon] ✓ Installed Tetragon v${TETRAGON_VERSION} on ${CLUSTER} (DaemonSet, system-node-critical)"

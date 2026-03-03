@@ -4,20 +4,20 @@
 
 locals {
   # --- Region & Availability Zones ---
-  location = "koreacentral"
+  location = var.location
   zones    = ["1", "2", "3"]
 
   # --- Naming prefix ---
-  prefix = "k8s-demo"
+  prefix = var.prefix
 
-  # --- Kubernetes version (ARCHITECTURE.md v3.2.0 기준: AKS v1.34) ---
-  kubernetes_version = "1.34"
+  # --- Kubernetes version ---
+  kubernetes_version = var.kubernetes_version
 
   # --- VM sizes ---
   vm_sizes = {
-    system  = "Standard_D2s_v5"
-    ingress = "Standard_D2s_v5"
-    jumpbox = "Standard_B2s"
+    system  = var.vm_size_system
+    ingress = var.vm_size_ingress
+    jumpbox = var.vm_size_jumpbox
     # worker 사이즈는 Karpenter/NAP NodePool CRD에서 직접 관리 (ARCHITECTURE.md §4.3)
   }
 
@@ -87,7 +87,7 @@ locals {
     jumpbox_vm        = "vm-jumpbox"
     jumpbox_nic       = "nic-jumpbox"
     grafana           = "grafana-${local.prefix}"
-    flow_log_storage  = "stk8sdemo${lower(var.kv_suffix)}fl" # globally unique: kv_suffix 재활용, 3-24 chars lowercase alphanumeric
+    flow_log_storage  = "st${replace(local.prefix, "-", "")}${lower(var.kv_suffix)}fl" # globally unique: kv_suffix 재활용, 3-24 chars lowercase alphanumeric
     # jumpbox는 Public IP 없음 — Bastion 경유 전용 (ARCHITECTURE.md §5.7, ADR-021)
   }
 }

@@ -26,7 +26,7 @@
 #
 # Usage:
 #   chmod +x addons/install.sh
-#   ./addons/install.sh [--cluster mgmt|app1|app2|all] [--dry-run]
+#   ./addons/install.sh [--cluster mgmt|app1|app2|all] [--prefix k8s-demo] [--location koreacentral] [--dry-run]
 #
 # Prerequisites (Jump VM 또는 VPN 접속 환경):
 #   - kubectl, helm, az, kubelogin 설치됨
@@ -38,9 +38,19 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SCRIPTS_DIR="${SCRIPT_DIR}/scripts"
 
+# --- Prerequisite check ---
+for cmd in kubectl helm az kubelogin; do
+  if ! command -v "$cmd" &>/dev/null; then
+    echo "ERROR: '$cmd' is not installed. Install it before running this script." >&2
+    exit 1
+  fi
+done
+
 # --- Parse arguments ---
 CLUSTER_TARGET="all"
 DRY_RUN=false
+export PREFIX="${PREFIX:-k8s-demo}"
+export LOCATION="${LOCATION:-koreacentral}"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -50,6 +60,22 @@ while [[ $# -gt 0 ]]; do
         exit 1
       fi
       CLUSTER_TARGET="$2"
+      shift 2
+      ;;
+    --prefix)
+      if [[ -z "${2:-}" ]]; then
+        echo "ERROR: --prefix requires a value (e.g. k8s-demo)" >&2
+        exit 1
+      fi
+      export PREFIX="$2"
+      shift 2
+      ;;
+    --location)
+      if [[ -z "${2:-}" ]]; then
+        echo "ERROR: --location requires a value (e.g. koreacentral)" >&2
+        exit 1
+      fi
+      export LOCATION="$2"
       shift 2
       ;;
     --dry-run)
@@ -85,6 +111,8 @@ run() {
 
 log "=== Phase 2: Addon Installation ==="
 log "Target cluster: ${CLUSTER_TARGET}"
+log "Prefix: ${PREFIX}"
+log "Location: ${LOCATION}"
 log "Dry run: ${DRY_RUN}"
 echo ""
 
@@ -186,10 +214,9 @@ if [[ "${CLUSTER_TARGET}" == "all" ]]; then
   run "${SCRIPTS_DIR}/11-budget-alert.sh"
 fi
 
-# --- Step 12: AKS Stop/Start Automation ---
+# --- Step 12: AKS Stop/Start Automation (STUB — 미구현) ---
 if [[ "${CLUSTER_TARGET}" == "all" ]]; then
-  log "--- [12] Setting up AKS Stop/Start Automation ---"
-  run "${SCRIPTS_DIR}/12-aks-automation.sh"
+  log "--- [12] AKS Stop/Start Automation (STUB — skipping, see 12-aks-automation.sh) ---"
 fi
 
 # --- Step 13: Cilium Hubble UI (전체) ---

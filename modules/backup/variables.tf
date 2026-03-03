@@ -1,9 +1,11 @@
 variable "location" {
-  type = string
+  description = "Azure region"
+  type        = string
 }
 
 variable "rg_common" {
-  type = string
+  description = "Common resource group name"
+  type        = string
 }
 
 variable "vault_name" {
@@ -22,7 +24,14 @@ variable "enable_soft_delete" {
   default     = false
 }
 
+variable "backup_retention_duration" {
+  description = "AKS backup retention duration (ISO 8601, e.g. P7D)"
+  type        = string
+  default     = "P7D"
+}
+
 variable "tags" {
-  type    = map(string)
-  default = {}
+  description = "Resource tags"
+  type        = map(string)
+  default     = {}
 }

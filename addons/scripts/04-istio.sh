@@ -12,7 +12,7 @@ CLUSTER="${1:?cluster name required}"
 
 echo "[istio] Enabling AKS Istio add-on (asm-1-28) on: ${CLUSTER}"
 
-RG="rg-k8s-demo-${CLUSTER}"
+RG="rg-${PREFIX:-k8s-demo}-${CLUSTER}"
 CLUSTER_NAME="aks-${CLUSTER}"
 REVISION="asm-1-28"
 

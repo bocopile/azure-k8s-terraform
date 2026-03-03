@@ -13,7 +13,7 @@ CLUSTER="${1:?cluster name required}"
 
 echo "[defender] Verifying Defender for Containers on: ${CLUSTER}"
 
-RG="rg-k8s-demo-${CLUSTER}"
+RG="rg-${PREFIX:-k8s-demo}-${CLUSTER}"
 CLUSTER_NAME="aks-${CLUSTER}"
 
 # Verify Defender extension is installed

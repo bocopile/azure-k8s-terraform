@@ -17,7 +17,7 @@ echo "[cert-manager] Installing on cluster: ${CLUSTER}"
 CERT_MANAGER_VERSION="v1.19.0"
 NAMESPACE="cert-manager"
 
-az aks get-credentials --resource-group "rg-k8s-demo-${CLUSTER}" \
+az aks get-credentials --resource-group "rg-${PREFIX:-k8s-demo}-${CLUSTER}" \
   --name "aks-${CLUSTER}" --overwrite-existing --only-show-errors
 
 helm repo add jetstack https://charts.jetstack.io --force-update
@@ -48,7 +48,7 @@ helm upgrade --install cert-manager jetstack/cert-manager \
   --set cainjector.resources.requests.memory=64Mi \
   --set cainjector.resources.limits.cpu=100m \
   --set cainjector.resources.limits.memory=128Mi \
-  --wait
+  --wait --timeout 10m
 
 # HPA — cert-manager controller
 cat <<'EOF' | kubectl apply -f -

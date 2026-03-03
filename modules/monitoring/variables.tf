@@ -1,21 +1,26 @@
 variable "location" {
-  type = string
+  description = "Azure region"
+  type        = string
 }
 
 variable "rg_common" {
-  type = string
+  description = "Common resource group name"
+  type        = string
 }
 
 variable "log_analytics_name" {
-  type = string
+  description = "Log Analytics Workspace name"
+  type        = string
 }
 
 variable "monitor_workspace_name" {
-  type = string
+  description = "Azure Monitor Workspace name (Managed Prometheus)"
+  type        = string
 }
 
 variable "app_insights_name" {
-  type = string
+  description = "Application Insights name"
+  type        = string
 }
 
 variable "enable_sentinel" {
@@ -35,7 +40,26 @@ variable "grafana_name" {
   type        = string
 }
 
+variable "log_retention_days" {
+  description = "Log Analytics Workspace retention in days"
+  type        = number
+  default     = 30
+}
+
+variable "grafana_public_access" {
+  description = "Enable public network access for Azure Managed Grafana"
+  type        = bool
+  default     = true
+}
+
+variable "grafana_sku" {
+  description = "Azure Managed Grafana SKU (Standard or Essential)"
+  type        = string
+  default     = "Standard"
+}
+
 variable "tags" {
-  type    = map(string)
-  default = {}
+  description = "Resource tags"
+  type        = map(string)
+  default     = {}
 }

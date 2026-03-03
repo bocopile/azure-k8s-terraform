@@ -36,7 +36,7 @@ resource "azurerm_data_protection_backup_policy_kubernetes_cluster" "aks_policy"
 
   default_retention_rule {
     life_cycle {
-      duration        = "P7D"
+      duration        = var.backup_retention_duration
       data_store_type = "OperationalStore"
     }
   }

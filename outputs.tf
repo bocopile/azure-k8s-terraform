@@ -4,12 +4,12 @@
 
 output "common_resource_group_name" {
   description = "Resource group name for shared resources (ACR, Key Vault, Monitoring, Backup)"
-  value       = module.network.common_resource_group_name
+  value       = module.resource_group.common_resource_group_name
 }
 
 output "cluster_resource_group_names" {
   description = "Resource group names per AKS cluster"
-  value       = module.aks.resource_group_names
+  value       = module.resource_group.cluster_resource_group_names
 }
 
 output "aks_cluster_ids" {
@@ -58,6 +58,21 @@ output "oidc_issuer_urls" {
 output "key_vault_private_endpoint_ip" {
   description = "Key Vault Private Endpoint IP"
   value       = module.keyvault.private_endpoint_ip
+}
+
+output "grafana_endpoint" {
+  description = "Azure Managed Grafana endpoint URL"
+  value       = module.monitoring.grafana_endpoint
+}
+
+output "bastion_host_name" {
+  description = "Azure Bastion host name"
+  value       = module.aks.bastion_host_name
+}
+
+output "log_analytics_workspace_name" {
+  description = "Log Analytics Workspace name"
+  value       = module.monitoring.log_analytics_workspace_name
 }
 
 output "phase2_command" {

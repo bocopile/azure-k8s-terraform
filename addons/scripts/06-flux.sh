@@ -12,7 +12,7 @@ CLUSTER="${1:?cluster name required}"
 
 echo "[flux] Enabling AKS GitOps (Flux v2) on: ${CLUSTER}"
 
-RG="rg-k8s-demo-${CLUSTER}"
+RG="rg-${PREFIX:-k8s-demo}-${CLUSTER}"
 CLUSTER_NAME="aks-${CLUSTER}"
 
 # Enable the GitOps extension
