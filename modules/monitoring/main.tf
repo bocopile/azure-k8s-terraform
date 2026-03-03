@@ -82,7 +82,7 @@ resource "azurerm_dashboard_grafana" "grafana" {
   name                          = var.grafana_name
   location                      = var.location
   resource_group_name           = var.rg_common
-  grafana_major_version         = "10"
+  grafana_major_version         = "11"
   sku                           = var.grafana_sku
   public_network_access_enabled = var.grafana_public_access
   zone_redundancy_enabled       = false

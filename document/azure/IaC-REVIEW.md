@@ -2,7 +2,7 @@
 
 > **버전**: 1.1.0
 > **작성일**: 2026-02-27
-> **최종 갱신**: 2026-03-01 (코드 반영 상태 동기화)
+> **최종 갱신**: 2026-03-03 (Phase 2 M1-M4 코드 반영 완료)
 > **대상**: 현재 구현된 OpenTofu IaC 코드 (main.tf ~ modules/aks/)
 > **목적**: 구현 후 검토 Q&A 결과를 반영한 개선 방향 문서화
 
@@ -215,10 +215,10 @@ AKS가 자동으로 생성하는 리소스는 Terraform state에 없음:
 
 | 항목 | 개선 내용 | 우선순위 |
 |------|---------|---------|
-| Key Vault 재사용성 | destroy 스크립트에 purge 단계 추가 | Medium |
+| ~~Key Vault 재사용성~~ | ~~destroy 가이드 + purge 절차 문서화~~ | ~~Medium~~ **완료** |
 | ~~Backup Vault~~ | ~~`enable_soft_delete` 변수화~~ | ~~**High**~~ **완료** |
-| 삭제 가이드 | `DESTROY.md` 작성 (순서/주의사항) | Medium |
-| `tofu destroy` 전처리 | Pre-destroy script (K8s 리소스 정리) | Medium |
+| ~~삭제 가이드~~ | ~~`DESTROY.md` 작성 (순서/주의사항)~~ | ~~Medium~~ **완료** |
+| ~~`tofu destroy` 전처리~~ | ~~Pre-destroy script (K8s 리소스 정리)~~ | ~~Medium~~ **완료** |
 
 ---
 
@@ -236,20 +236,25 @@ AKS가 자동으로 생성하는 리소스는 Terraform state에 없음:
 | **마이그레이션** | `tofu init -migrate-state` 한 번으로 이전 |
 | **엔터프라이즈 표준** | State Locking (Blob Lease)으로 동시 작업 무결성 보장 |
 
-#### 현재 main.tf 상태
+#### 현재 상태 — 구현 완료
+
+> **v1.2.0 갱신**: M1 개선 항목으로 `backend.tf` 별도 파일 분리 완료.
 
 ```hcl
-# main.tf:23-39 — 주석으로 이미 작성됨
-backend "local" {}    # 현재: 로컬 파일
+# backend.tf — Backend 설정 별도 파일로 분리
+terraform {
+  # Active: Local backend (dev/PoC)
+  backend "local" {}
 
-# 향후 azurerm backend로 교체:
-# backend "azurerm" {
-#   resource_group_name  = "rg-tfstate"
-#   storage_account_name = "<globally-unique-name>"
-#   container_name       = "tfstate"
-#   key                  = "azure-k8s-demo/main.tfstate"
-#   use_azuread_auth     = true   # MSI/OIDC — credentials 불필요
-# }
+  # 전환 대상: Azure Blob Storage backend (주석 해제 후 사용)
+  # backend "azurerm" {
+  #   resource_group_name  = "rg-tfstate"
+  #   storage_account_name = "<globally-unique-name>"
+  #   container_name       = "tfstate"
+  #   key                  = "azure-k8s-demo/main.tfstate"
+  #   use_azuread_auth     = true
+  # }
+}
 ```
 
 #### 마이그레이션 전체 절차
@@ -318,14 +323,14 @@ terraform {
 | ~~H3~~ | `modules/backup/main.tf` | **완료** | `soft_delete` 변수화 (`enable_soft_delete`) |
 | ~~H4~~ | `modules/backup/variables.tf` | **완료** | `enable_soft_delete` 변수 추가 (`default = false`) |
 
-### 3.2 중기 개선 (Medium)
+### 3.2 중기 개선 (Medium) — 모두 완료
 
-| # | 파일 | 현재 상태 | 개선 내용 |
-|---|------|---------|---------|
-| M1 | `main.tf` | `backend "local"` | `backend "azurerm"` 전환 (별도 `backend.tf`) |
-| M2 | 신규 | 없음 | `DESTROY.md` — 삭제 순서/주의사항 가이드 |
-| M3 | 신규 | 없음 | `scripts/pre-destroy.sh` — K8s 리소스 사전 정리 |
-| M4 | `modules/keyvault/main.tf` | purge_protection=false 주석만 | 변수화 + destroy 후 purge 가이드 주석 보강 |
+| # | 파일 | 상태 | 내용 |
+|---|------|------|------|
+| ~~M1~~ | `backend.tf` (신규) | **완료** | Backend 설정을 `main.tf`에서 별도 파일로 분리, azurerm 전환 가이드 포함 |
+| ~~M2~~ | `DESTROY.md` (신규) | **완료** | 삭제 순서/주의사항 가이드 (Key Vault purge, Backup Vault, 잔여 리소스 확인) |
+| ~~M3~~ | `scripts/pre-destroy.sh` (신규) | **완료** | K8s 리소스 사전 정리 스크립트 (LB, PVC, Flux, Backup Extension, Backup Instance) |
+| ~~M4~~ | `modules/keyvault/main.tf` | **완료** | destroy 시 주의사항 + purge 절차 가이드 주석 보강, provider 설정 문서화 |
 
 ### 3.3 장기 개선 (Low)
 
@@ -344,10 +349,11 @@ Phase 1 (즉시): H1 ~ H4 코드 수정 — ✅ 모두 완료
   ✅ Jump VM IP 고정 (Static + 10.1.1.10)
   ✅ Backup Vault soft_delete 변수화 (enable_soft_delete)
 
-Phase 2 (중기): M1 ~ M4
-  └─ Backend → Azure Blob Storage 전환
-  └─ DESTROY.md 가이드 작성
-  └─ pre-destroy.sh 스크립트
+Phase 2 (중기): M1 ~ M4 — ✅ 모두 완료
+  ✅ Backend 설정 별도 파일 분리 (backend.tf)
+  ✅ DESTROY.md 삭제 가이드 작성
+  ✅ scripts/pre-destroy.sh 사전 정리 스크립트
+  ✅ KeyVault destroy 가이드 주석 보강
 
 Phase 3 (장기): L1 ~ L3
   └─ Budget 모듈 IaC화

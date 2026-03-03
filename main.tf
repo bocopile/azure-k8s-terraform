@@ -20,23 +20,7 @@ terraform {
     }
   }
 
-  # Backend: Local (dev phase)
-  # ──────────────────────────────────────────────────────────
-  # Blob Storage 전환 절차:
-  #   1. az storage account create --name <unique> --resource-group rg-tfstate --sku Standard_LRS
-  #   2. az storage container create --name tfstate --account-name <unique>
-  #   3. 아래 backend "azurerm" 블록 주석 해제 후 backend "local" {} 제거
-  #   4. tofu init -migrate-state   ← 로컬 state 자동 이전
-  #   5. rm terraform.tfstate terraform.tfstate.backup
-  # ──────────────────────────────────────────────────────────
-  # backend "azurerm" {
-  #   resource_group_name  = "rg-tfstate"
-  #   storage_account_name = "<globally-unique-name>"
-  #   container_name       = "tfstate"
-  #   key                  = "azure-k8s-demo/main.tfstate"
-  #   use_azuread_auth     = true   # MSI/OIDC — credentials 불필요
-  # }
-  backend "local" {}
+  # Backend 설정은 backend.tf에서 관리
 }
 
 provider "azurerm" {
@@ -45,6 +29,9 @@ provider "azurerm" {
 
   features {
     key_vault {
+      # false: destroy 후 soft-deleted 상태 유지 (안전, 수동 purge 필요)
+      # true:  destroy 시 즉시 purge (편의성↑, 데이터 손실 위험↑)
+      # 상세 절차: DESTROY.md §4 참조
       purge_soft_delete_on_destroy    = false
       recover_soft_deleted_key_vaults = true
     }

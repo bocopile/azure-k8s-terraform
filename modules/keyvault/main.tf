@@ -2,6 +2,18 @@
 # modules/keyvault/main.tf
 # Azure Key Vault — Standard SKU, RBAC mode, Private Endpoint
 # ARCHITECTURE.md §5.6: Private Endpoint 필수
+#
+# ── Destroy 시 주의사항 ──
+# Key Vault는 Azure 정책상 삭제 시 soft-deleted 상태로 90일 보존된다.
+# 동일 이름으로 재생성이 불가하므로 아래 중 하나로 대응:
+#   1) az keyvault purge --name <name>  (purge_protection=false인 경우)
+#   2) kv_suffix 변경하여 새 이름으로 재생성
+#
+# Provider 설정 (main.tf):
+#   purge_soft_delete_on_destroy = false  → destroy 시 purge 안 함 (기본, 안전)
+#   purge_soft_delete_on_destroy = true   → destroy 시 즉시 purge (데이터 손실 주의)
+#
+# 상세 절차: DESTROY.md §4 참조
 # ============================================================
 
 data "azurerm_client_config" "current" {}
@@ -14,8 +26,10 @@ resource "azurerm_key_vault" "kv" {
   sku_name            = var.sku_name
 
   # RBAC authorization (access policy 방식 미사용, 최신 권장)
-  enable_rbac_authorization = true
+  rbac_authorization_enabled = true
 
+  # Soft delete: Azure 강제 정책 (90일 보존, 비활성화 불가)
+  # Purge protection: false=demo (즉시 purge 가능), true=prod (90일 대기)
   soft_delete_retention_days = 90
   purge_protection_enabled   = var.purge_protection
 
@@ -101,8 +115,5 @@ resource "azurerm_monitor_diagnostic_setting" "kv" {
   enabled_log { category = "AuditEvent" }
   enabled_log { category = "AzurePolicyEvaluationDetails" }
 
-  metric {
-    category = "AllMetrics"
-    enabled  = true
-  }
+  enabled_metric { category = "AllMetrics" }
 }

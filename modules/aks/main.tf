@@ -55,8 +55,7 @@ resource "azurerm_kubernetes_cluster" "aks" {
     vnet_subnet_id = var.subnet_ids[each.value.vnet_key]
 
     # System critical addons only (C6)
-    # azurerm v4.x: only_critical_addons_enabled deprecated → node_taints 사용
-    node_taints = ["CriticalAddonsOnly=true:NoSchedule"]
+    only_critical_addons_enabled = true
 
     upgrade_settings {
       max_surge = "33%"

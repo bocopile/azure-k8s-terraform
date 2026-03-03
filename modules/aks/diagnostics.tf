@@ -30,8 +30,5 @@ resource "azurerm_monitor_diagnostic_setting" "aks" {
   enabled_log { category = "cloud-controller-manager" }
 
   # 메트릭
-  metric {
-    category = "AllMetrics"
-    enabled  = true
-  }
+  enabled_metric { category = "AllMetrics" }
 }
