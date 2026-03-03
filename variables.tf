@@ -29,7 +29,7 @@ variable "jumpbox_admin_username" {
 }
 
 variable "jumpbox_ssh_public_key" {
-  description = "SSH public key for the jump VM (path or raw key)"
+  description = "SSH public key string for the jump VM (e.g. output of: cat ~/.ssh/id_rsa.pub)"
   type        = string
   sensitive   = true
 }

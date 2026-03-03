@@ -28,9 +28,9 @@ resource "azurerm_data_protection_backup_vault" "vault" {
 # ============================================================
 
 resource "azurerm_data_protection_backup_policy_kubernetes_cluster" "aks_policy" {
-  name                            = var.policy_name
-  resource_group_name             = var.rg_common
-  vault_name                      = azurerm_data_protection_backup_vault.vault.name
+  name                = var.policy_name
+  resource_group_name = var.rg_common
+  vault_name          = azurerm_data_protection_backup_vault.vault.name
 
   backup_repeating_time_intervals = ["R/2024-01-01T02:00:00+00:00/P1D"]
 

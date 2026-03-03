@@ -20,14 +20,14 @@ resource "azurerm_network_watcher" "nw" {
 }
 
 resource "azurerm_storage_account" "flow_logs" {
-  name                            = local.names.flow_log_storage
-  location                        = local.location
-  resource_group_name             = module.network.common_resource_group_name
-  account_tier                    = "Standard"
-  account_replication_type        = "LRS"
+  name                              = local.names.flow_log_storage
+  location                          = local.location
+  resource_group_name               = module.network.common_resource_group_name
+  account_tier                      = "Standard"
+  account_replication_type          = "LRS"
   min_tls_version                   = "TLS1_2"
   infrastructure_encryption_enabled = true
-  tags                            = var.tags
+  tags                              = var.tags
 }
 
 resource "azurerm_network_watcher_flow_log" "aks" {

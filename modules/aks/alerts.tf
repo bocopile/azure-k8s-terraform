@@ -60,12 +60,12 @@ resource "azurerm_monitor_metric_alert" "memory_high" {
 resource "azurerm_monitor_scheduled_query_rules_alert_v2" "crashloop" {
   for_each = var.clusters
 
-  name                = "alert-crashloop-${each.key}"
-  resource_group_name = azurerm_resource_group.cluster[each.key].name
-  location            = var.location
-  scopes              = [var.log_analytics_workspace_id]
-  description         = "AKS ${each.key}: Pod CrashLoopBackOff 감지"
-  severity            = 1
+  name                 = "alert-crashloop-${each.key}"
+  resource_group_name  = azurerm_resource_group.cluster[each.key].name
+  location             = var.location
+  scopes               = [var.log_analytics_workspace_id]
+  description          = "AKS ${each.key}: Pod CrashLoopBackOff 감지"
+  severity             = 1
   evaluation_frequency = "PT5M"
   window_duration      = "PT15M"
 

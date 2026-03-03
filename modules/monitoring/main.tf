@@ -79,13 +79,13 @@ resource "azurerm_sentinel_data_connector_microsoft_cloud_app_security" "mcas" {
 resource "azurerm_dashboard_grafana" "grafana" {
   count = var.enable_grafana ? 1 : 0
 
-  name                              = var.grafana_name
-  location                          = var.location
-  resource_group_name               = var.rg_common
-  grafana_major_version             = "10"
-  sku                               = "Standard"
-  public_network_access_enabled     = true
-  zone_redundancy_enabled           = false
+  name                          = var.grafana_name
+  location                      = var.location
+  resource_group_name           = var.rg_common
+  grafana_major_version         = "10"
+  sku                           = "Standard"
+  public_network_access_enabled = true
+  zone_redundancy_enabled       = false
 
   identity {
     type = "SystemAssigned"

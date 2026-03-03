@@ -113,15 +113,15 @@ module "acr" {
 module "identity" {
   source = "./modules/identity"
 
-  location     = local.location
-  rg_common    = local.rg_common
-  clusters     = local.clusters
+  location                = local.location
+  rg_common               = local.rg_common
+  clusters                = local.clusters
   acr_id                  = module.acr.acr_id
   vnet_ids                = module.network.vnet_ids
   key_vault_id            = module.keyvault.key_vault_id
   aks_private_dns_zone_id = module.network.aks_private_dns_zone_id
   dns_zone_id             = var.dns_zone_id
-  tags         = var.tags
+  tags                    = var.tags
 
   depends_on = [module.network, module.acr, module.keyvault]
 }
@@ -168,7 +168,7 @@ module "aks" {
   rg_cluster            = local.rg_cluster
   rg_common             = local.rg_common
 
-  subnet_ids        = module.network.aks_subnet_ids
+  subnet_ids              = module.network.aks_subnet_ids
   bastion_subnet_id       = module.network.bastion_subnet_id
   jumpbox_subnet_id       = module.network.jumpbox_subnet_id
   aks_private_dns_zone_id = module.network.aks_private_dns_zone_id
