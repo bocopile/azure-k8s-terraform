@@ -14,21 +14,21 @@ CLUSTER="${1:?cluster name required}"
 
 echo "[otel] Installing OpenTelemetry Collector on: ${CLUSTER}"
 
-OTEL_CHART_VERSION="0.116.0"
+OTEL_CHART_VERSION="0.146.1"
 NAMESPACE="otel-system"
 
-az aks get-credentials --resource-group "rg-${PREFIX:-k8s-demo}-${CLUSTER}" \
+az aks get-credentials --resource-group "rg-${PREFIX:-k8s}-${CLUSTER}" \
   --name "aks-${CLUSTER}" --overwrite-existing --only-show-errors
 
 # App Insights Connection String 가져오기
 APPINSIGHTS_CS=$(az monitor app-insights component show \
-  --resource-group "rg-${PREFIX:-k8s-demo}-common" \
-  --app "appi-${PREFIX:-k8s-demo}" \
+  --resource-group "rg-${PREFIX:-k8s}-common" \
+  --app "appi-${PREFIX:-k8s}" \
   --query "connectionString" --output tsv 2>/dev/null || echo "")
 
 if [[ -z "${APPINSIGHTS_CS}" ]]; then
   echo "[otel] ERROR: App Insights connection string not found." >&2
-  echo "[otel] Ensure 'appi-${PREFIX:-k8s-demo}' exists in 'rg-${PREFIX:-k8s-demo}-common'." >&2
+  echo "[otel] Ensure 'appi-${PREFIX:-k8s}' exists in 'rg-${PREFIX:-k8s}-common'." >&2
   echo "[otel] Or set APPINSIGHTS_CONNECTION_STRING env var before running." >&2
   exit 1
 fi

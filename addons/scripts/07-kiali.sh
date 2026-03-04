@@ -18,10 +18,10 @@ fi
 
 echo "[kiali] Installing Kiali v2.21 on: ${CLUSTER}"
 
-KIALI_VERSION="2.21.0"
+KIALI_VERSION="2.22.0"
 NAMESPACE="kiali-operator"
 
-az aks get-credentials --resource-group "rg-${PREFIX:-k8s-demo}-${CLUSTER}" \
+az aks get-credentials --resource-group "rg-${PREFIX:-k8s}-${CLUSTER}" \
   --name "aks-${CLUSTER}" --overwrite-existing --only-show-errors
 
 helm repo add kiali https://kiali.org/helm-charts --force-update

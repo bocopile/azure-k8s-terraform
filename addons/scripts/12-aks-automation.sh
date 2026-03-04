@@ -17,7 +17,7 @@ set -euo pipefail
 echo "[aks-automation] Setting up AKS Stop/Start schedule"
 
 CLUSTERS=("aks-mgmt" "aks-app1" "aks-app2")
-RGS=("rg-${PREFIX:-k8s-demo}-mgmt" "rg-${PREFIX:-k8s-demo}-app1" "rg-${PREFIX:-k8s-demo}-app2")
+RGS=("rg-${PREFIX:-k8s}-mgmt" "rg-${PREFIX:-k8s}-app1" "rg-${PREFIX:-k8s}-app2")
 
 echo "[aks-automation] Clusters to manage:"
 for i in "${!CLUSTERS[@]}"; do

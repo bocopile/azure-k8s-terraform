@@ -15,10 +15,10 @@ CLUSTER="${1:?cluster name required}"
 
 echo "[tetragon] Installing Cilium Tetragon on: ${CLUSTER}"
 
-TETRAGON_VERSION="1.4.0"
+TETRAGON_VERSION="1.6.0"
 NAMESPACE="kube-system"
 
-az aks get-credentials --resource-group "rg-${PREFIX:-k8s-demo}-${CLUSTER}" \
+az aks get-credentials --resource-group "rg-${PREFIX:-k8s}-${CLUSTER}" \
   --name "aks-${CLUSTER}" --overwrite-existing --only-show-errors
 
 helm repo add cilium https://helm.cilium.io --force-update

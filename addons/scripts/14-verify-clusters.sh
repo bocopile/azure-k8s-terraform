@@ -28,7 +28,7 @@ for CLUSTER in "${CLUSTERS[@]}"; do
   log "Checking cluster: aks-${CLUSTER}"
   log "============================================"
 
-  az aks get-credentials --resource-group "rg-${PREFIX:-k8s-demo}-${CLUSTER}" \
+  az aks get-credentials --resource-group "rg-${PREFIX:-k8s}-${CLUSTER}" \
     --name "aks-${CLUSTER}" --overwrite-existing --only-show-errors 2>/dev/null
 
   # --- 1. 노드 상태 ---

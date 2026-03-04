@@ -13,10 +13,10 @@ CLUSTER="${1:?cluster name required}"
 
 echo "[vpa] Installing Vertical Pod Autoscaler on: ${CLUSTER}"
 
-VPA_VERSION="4.7.1"
+VPA_VERSION="4.10.1"
 NAMESPACE="kube-system"
 
-az aks get-credentials --resource-group "rg-${PREFIX:-k8s-demo}-${CLUSTER}" \
+az aks get-credentials --resource-group "rg-${PREFIX:-k8s}-${CLUSTER}" \
   --name "aks-${CLUSTER}" --overwrite-existing --only-show-errors
 
 helm repo add fairwinds-stable https://charts.fairwinds.com/stable --force-update

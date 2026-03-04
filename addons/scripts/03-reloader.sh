@@ -14,10 +14,10 @@ CLUSTER="${1:?cluster name required}"
 
 echo "[reloader] Installing Stakater Reloader on: ${CLUSTER}"
 
-RELOADER_VERSION="1.2.0"
+RELOADER_VERSION="2.2.8"
 NAMESPACE="reloader"
 
-az aks get-credentials --resource-group "rg-${PREFIX:-k8s-demo}-${CLUSTER}" \
+az aks get-credentials --resource-group "rg-${PREFIX:-k8s}-${CLUSTER}" \
   --name "aks-${CLUSTER}" --overwrite-existing --only-show-errors
 
 helm repo add stakater https://stakater.github.io/stakater-charts --force-update

@@ -23,7 +23,7 @@ echo "[kyverno] Installing Kyverno on: ${CLUSTER}"
 KYVERNO_CHART_VERSION="3.7.1"
 NAMESPACE="kyverno"
 
-az aks get-credentials --resource-group "rg-${PREFIX:-k8s-demo}-${CLUSTER}" \
+az aks get-credentials --resource-group "rg-${PREFIX:-k8s}-${CLUSTER}" \
   --name "aks-${CLUSTER}" --overwrite-existing --only-show-errors
 
 helm repo add kyverno https://kyverno.github.io/kyverno --force-update

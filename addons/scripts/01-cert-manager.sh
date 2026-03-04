@@ -14,10 +14,10 @@ CLUSTER="${1:?cluster name required}"
 
 echo "[cert-manager] Installing on cluster: ${CLUSTER}"
 
-CERT_MANAGER_VERSION="v1.19.0"
+CERT_MANAGER_VERSION="v1.19.4"
 NAMESPACE="cert-manager"
 
-az aks get-credentials --resource-group "rg-${PREFIX:-k8s-demo}-${CLUSTER}" \
+az aks get-credentials --resource-group "rg-${PREFIX:-k8s}-${CLUSTER}" \
   --name "aks-${CLUSTER}" --overwrite-existing --only-show-errors
 
 helm repo add jetstack https://charts.jetstack.io --force-update

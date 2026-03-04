@@ -35,7 +35,7 @@
 graph TB
     subgraph Azure["Azure Cloud (Korea Central)"]
 
-        subgraph Common["rg-k8s-demo-common"]
+        subgraph Common["rg-k8s-common"]
             VNet_MGMT["VNet mgmt<br/>10.1.0.0/16"]
             VNet_APP1["VNet app1<br/>10.2.0.0/16"]
             VNet_APP2["VNet app2<br/>10.3.0.0/16"]
@@ -51,7 +51,7 @@ graph TB
         VNet_MGMT <-->|"VNet Peering"| VNet_APP2
         VNet_APP1 <-->|"VNet Peering"| VNet_APP2
 
-        subgraph MGMT["rg-k8s-demo-mgmt"]
+        subgraph MGMT["rg-k8s-mgmt"]
             subgraph AKS_MGMT["AKS mgmt (Standard Tier, Zone 1/2/3)"]
                 MGMT_SYS["System Pool<br/>D2s_v5 × 3 (Regular, AZ)"]
                 MGMT_IGW["Ingress Pool<br/>D2s_v5 × 3 (Regular, AZ)"]
@@ -62,7 +62,7 @@ graph TB
             JUMPVM["Jump VM<br/>(B2s, private IP)"]
         end
 
-        subgraph APP1["rg-k8s-demo-app1"]
+        subgraph APP1["rg-k8s-app1"]
             subgraph AKS_APP1["AKS app1 (Standard Tier, Zone 1/2/3)"]
                 APP1_SYS["System Pool<br/>D2s_v5 × 3 (Regular, AZ)"]
                 APP1_IGW["Ingress Pool<br/>D2s_v5 × 3 (Regular, AZ)"]
@@ -71,7 +71,7 @@ graph TB
             end
         end
 
-        subgraph APP2["rg-k8s-demo-app2"]
+        subgraph APP2["rg-k8s-app2"]
             subgraph AKS_APP2["AKS app2 (Standard Tier, Zone 1/2/3)"]
                 APP2_SYS["System Pool<br/>D2s_v5 × 3 (Regular, AZ)"]
                 APP2_SPOT["Worker Pool<br/>D2s_v5 (Spot, AZ)"]
@@ -126,12 +126,12 @@ graph TB
 > **대상**: 인프라 엔지니어, 비용 관리자
 >
 > 4개 Resource Group 간 리소스 소속과 의존 관계를 보여줍니다.
-> 핵심 포인트: `rg-k8s-demo-common`에 공유 리소스를 집중하여
+> 핵심 포인트: `rg-k8s-common`에 공유 리소스를 집중하여
 > 클러스터별 RG를 독립적으로 생성/삭제할 수 있는 구조입니다.
 
 ```mermaid
 graph LR
-    subgraph rg-common["rg-k8s-demo-common"]
+    subgraph rg-common["rg-k8s-common"]
         VNet["VNet + Subnets + NSG"]
         KV["Key Vault"]
         MON["Monitor Workspace"]
@@ -142,19 +142,19 @@ graph LR
         ACR["ACR (Basic)"]
     end
 
-    subgraph rg-mgmt["rg-k8s-demo-mgmt"]
+    subgraph rg-mgmt["rg-k8s-mgmt"]
         AKS_M["AKS mgmt"]
         MI_M["Managed Identity"]
         BAST["Azure Bastion"]
         JVM["Jump VM (private)"]
     end
 
-    subgraph rg-app1["rg-k8s-demo-app1"]
+    subgraph rg-app1["rg-k8s-app1"]
         AKS_A1["AKS app1"]
         MI_A1["Managed Identity"]
     end
 
-    subgraph rg-app2["rg-k8s-demo-app2"]
+    subgraph rg-app2["rg-k8s-app2"]
         AKS_A2["AKS app2"]
         MI_A2["Managed Identity"]
     end

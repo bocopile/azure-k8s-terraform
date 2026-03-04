@@ -251,7 +251,7 @@ terraform {
   #   resource_group_name  = "rg-tfstate"
   #   storage_account_name = "<globally-unique-name>"
   #   container_name       = "tfstate"
-  #   key                  = "azure-k8s-demo/main.tfstate"
+  #   key                  = "azure-k8s/main.tfstate"
   #   use_azuread_auth     = true
   # }
 }
@@ -302,7 +302,7 @@ terraform {
     resource_group_name  = "rg-tfstate"
     storage_account_name = "tfstateak8sdemo"   # 실제 고유 이름으로 변경
     container_name       = "tfstate"
-    key                  = "azure-k8s-demo/prod.tfstate"
+    key                  = "azure-k8s/prod.tfstate"
     use_azuread_auth     = true                # MSI/OIDC 인증 (credentials 불필요)
   }
 }

@@ -13,10 +13,10 @@ CLUSTER="${1:?cluster name required}"
 
 echo "[backup] Installing AKS Backup Extension on: ${CLUSTER}"
 
-RG="rg-${PREFIX:-k8s-demo}-${CLUSTER}"
+RG="rg-${PREFIX:-k8s}-${CLUSTER}"
 CLUSTER_NAME="aks-${CLUSTER}"
-COMMON_RG="rg-${PREFIX:-k8s-demo}-common"
-VAULT_NAME="bv-${PREFIX:-k8s-demo}"
+COMMON_RG="rg-${PREFIX:-k8s}-common"
+VAULT_NAME="bv-${PREFIX:-k8s}"
 # Install AKS Backup Extension
 az k8s-extension create \
   --resource-group "${RG}" \

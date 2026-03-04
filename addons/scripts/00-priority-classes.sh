@@ -17,7 +17,7 @@ CLUSTER="${1:?cluster name required}"
 
 echo "[priority-classes] Applying to cluster: ${CLUSTER}"
 
-az aks get-credentials --resource-group "rg-${PREFIX:-k8s-demo}-${CLUSTER}" \
+az aks get-credentials --resource-group "rg-${PREFIX:-k8s}-${CLUSTER}" \
   --name "aks-${CLUSTER}" --overwrite-existing --only-show-errors
 
 kubectl apply -f - <<EOF

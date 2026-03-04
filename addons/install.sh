@@ -21,12 +21,13 @@
 #   13  hubble            — Cilium Hubble UI (전체)
 #   15  tetragon          — Cilium Tetragon 런타임 보안 (전체)
 #   16  otel-collector    — OpenTelemetry Collector (전체)
+#   17  grafana-dashboards— Azure Managed Grafana 대시보드 프로비저닝
 #   19  vpa               — Vertical Pod Autoscaler (전체)
 #   14  verify-clusters   — 최종 검증 (항상 마지막)
 #
 # Usage:
 #   chmod +x addons/install.sh
-#   ./addons/install.sh [--cluster mgmt|app1|app2|all] [--prefix k8s-demo] [--location koreacentral] [--dry-run]
+#   ./addons/install.sh [--cluster mgmt|app1|app2|all] [--prefix k8s] [--location koreacentral] [--dry-run]
 #
 # Prerequisites (Jump VM 또는 VPN 접속 환경):
 #   - kubectl, helm, az, kubelogin 설치됨
@@ -49,7 +50,7 @@ done
 # --- Parse arguments ---
 CLUSTER_TARGET="all"
 DRY_RUN=false
-export PREFIX="${PREFIX:-k8s-demo}"
+export PREFIX="${PREFIX:-k8s}"
 export LOCATION="${LOCATION:-koreacentral}"
 
 while [[ $# -gt 0 ]]; do
@@ -64,7 +65,7 @@ while [[ $# -gt 0 ]]; do
       ;;
     --prefix)
       if [[ -z "${2:-}" ]]; then
-        echo "ERROR: --prefix requires a value (e.g. k8s-demo)" >&2
+        echo "ERROR: --prefix requires a value (e.g. k8s)" >&2
         exit 1
       fi
       export PREFIX="$2"
@@ -178,7 +179,7 @@ for cluster in mgmt app1 app2; do
   fi
 done
 
-# --- Step 07: Kiali v2.21 (mgmt only) ---
+# --- Step 07: Kiali (mgmt only) ---
 if [[ "${CLUSTER_TARGET}" == "all" || "${CLUSTER_TARGET}" == "mgmt" ]]; then
   log "--- [07] Installing Kiali on mgmt ---"
   run "${SCRIPTS_DIR}/07-kiali.sh" mgmt
@@ -242,6 +243,12 @@ for cluster in mgmt app1 app2; do
     run "${SCRIPTS_DIR}/16-otel-collector.sh" "${cluster}"
   fi
 done
+
+# --- Step 17: Grafana Dashboards (한 번만 실행) ---
+if [[ "${CLUSTER_TARGET}" == "all" ]]; then
+  log "--- [17] Provisioning Grafana Dashboards ---"
+  run "${SCRIPTS_DIR}/17-grafana-dashboards.sh"
+fi
 
 # --- Step 19: Vertical Pod Autoscaler (전체) ---
 for cluster in mgmt app1 app2; do

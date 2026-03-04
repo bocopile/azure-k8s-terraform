@@ -14,10 +14,10 @@ CLUSTER="${1:?cluster name required}"
 
 echo "[eso] Installing External Secrets Operator on: ${CLUSTER}"
 
-ESO_VERSION="0.10.5"
+ESO_VERSION="2.0.1"
 NAMESPACE="external-secrets"
 
-az aks get-credentials --resource-group "rg-${PREFIX:-k8s-demo}-${CLUSTER}" \
+az aks get-credentials --resource-group "rg-${PREFIX:-k8s}-${CLUSTER}" \
   --name "aks-${CLUSTER}" --overwrite-existing --only-show-errors
 
 helm repo add external-secrets https://charts.external-secrets.io --force-update

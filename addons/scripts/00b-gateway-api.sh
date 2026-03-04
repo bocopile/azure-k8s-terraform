@@ -13,11 +13,11 @@
 set -euo pipefail
 CLUSTER="${1:?cluster name required}"
 
-GATEWAY_API_VERSION="v1.3.0"
+GATEWAY_API_VERSION="v1.5.0"
 
 echo "[gateway-api] Installing Gateway API CRDs (${GATEWAY_API_VERSION}) on: ${CLUSTER}"
 
-az aks get-credentials --resource-group "rg-${PREFIX:-k8s-demo}-${CLUSTER}" \
+az aks get-credentials --resource-group "rg-${PREFIX:-k8s}-${CLUSTER}" \
   --name "aks-${CLUSTER}" --overwrite-existing --only-show-errors
 
 # Standard channel CRDs (HTTPRoute, GRPCRoute, Gateway, GatewayClass 포함)

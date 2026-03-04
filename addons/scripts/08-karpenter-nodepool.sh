@@ -12,7 +12,7 @@ CLUSTER="${1:?cluster name required}"
 
 echo "[karpenter] Configuring NAP NodePool on: ${CLUSTER}"
 
-az aks get-credentials --resource-group "rg-${PREFIX:-k8s-demo}-${CLUSTER}" \
+az aks get-credentials --resource-group "rg-${PREFIX:-k8s}-${CLUSTER}" \
   --name "aks-${CLUSTER}" --overwrite-existing --only-show-errors
 
 # Apply NodePool CR (example — customize per cluster)

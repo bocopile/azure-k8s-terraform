@@ -90,12 +90,12 @@ azure-k8s-terraform/
 
 | 리소스 유형 | 패턴 | 예시 |
 |-----------|------|------|
-| Resource Group | `rg-k8s-demo-{scope}` | `rg-k8s-demo-mgmt`, `rg-k8s-demo-common` |
+| Resource Group | `rg-k8s-{scope}` | `rg-k8s-mgmt`, `rg-k8s-common` |
 | AKS 클러스터 | `aks-{role}` | `aks-mgmt`, `aks-app1`, `aks-app2` |
 | VNet | `vnet-{role}` | `vnet-mgmt`, `vnet-app1` |
-| Key Vault | `kv-k8s-demo-{suffix}` | `kv-k8s-demo-001` |
+| Key Vault | `kv-k8s-{suffix}` | `kv-k8s-001` |
 | ACR | `acr{name}` | 전역 유니크, variables.tf에 정의 |
-| Jump VM | `vm-jumpbox` | rg-k8s-demo-mgmt에 위치 |
+| Jump VM | `vm-jumpbox` | rg-k8s-mgmt에 위치 |
 
 ---
 
@@ -154,7 +154,7 @@ GitOps         : Flux v2 (AKS 애드온, SSH Deploy Key)
 | System (default_node_pool) | `Standard_D2s_v5` | 3 | Regular | mgmt, app1, app2 |
 | Ingress | `Standard_D2s_v5` | 3 (0 for app2) | Regular | mgmt, app1 (app2 미배포) |
 | Worker | `Standard_D2s_v5` | 0 (Karpenter 관리) | **Spot** | mgmt, app1, app2 |
-| Jump VM | `Standard_B2s` | — | — | rg-k8s-demo-mgmt |
+| Jump VM | `Standard_B2s` | — | — | rg-k8s-mgmt |
 
 ### 리소스 SKU
 
@@ -267,7 +267,7 @@ resource "azurerm_kubernetes_cluster" "aks" {
   for_each = local.clusters            # key: "mgmt" / "app1" / "app2"
 
   name                    = "aks-${each.key}"
-  resource_group_name     = "rg-k8s-demo-${each.key}"
+  resource_group_name     = "rg-k8s-${each.key}"
   location                = local.location
   sku_tier                = "Standard"       # 99.95% SLA
   private_cluster_enabled = true             # API Server 공개 엔드포인트 없음
@@ -323,7 +323,7 @@ set -euo pipefail
 
 # 실행 대상 클러스터 명시: mgmt / app1 / app2
 CLUSTER="mgmt"
-RG="rg-k8s-demo-${CLUSTER}"
+RG="rg-k8s-${CLUSTER}"
 AKS_NAME="aks-${CLUSTER}"
 
 az aks get-credentials -g "${RG}" -n "${AKS_NAME}"
@@ -436,9 +436,9 @@ spec:
 # Step 1: Azure Portal → Bastion → vm-jumpbox SSH 연결
 # Step 2: Jump VM에서 실행
 az login
-az aks get-credentials -g rg-k8s-demo-mgmt -n aks-mgmt
-az aks get-credentials -g rg-k8s-demo-app1 -n aks-app1
-az aks get-credentials -g rg-k8s-demo-app2 -n aks-app2
+az aks get-credentials -g rg-k8s-mgmt -n aks-mgmt
+az aks get-credentials -g rg-k8s-app1 -n aks-app1
+az aks get-credentials -g rg-k8s-app2 -n aks-app2
 
 # Step 3: kubectl 사용 (VNet 내부 통신)
 kubectl get nodes -L topology.kubernetes.io/zone
@@ -504,18 +504,18 @@ az aks mesh get-revisions --location koreacentral -o table
 
 ```bash
 # AKS 야간 정지 (비용 절감)
-az aks stop -g rg-k8s-demo-mgmt -n aks-mgmt --no-wait
-az aks stop -g rg-k8s-demo-app1 -n aks-app1 --no-wait
-az aks stop -g rg-k8s-demo-app2 -n aks-app2 --no-wait
+az aks stop -g rg-k8s-mgmt -n aks-mgmt --no-wait
+az aks stop -g rg-k8s-app1 -n aks-app1 --no-wait
+az aks stop -g rg-k8s-app2 -n aks-app2 --no-wait
 
 # AKS 재시작
-az aks start -g rg-k8s-demo-mgmt -n aks-mgmt --no-wait
-az aks start -g rg-k8s-demo-app1 -n aks-app1 --no-wait
-az aks start -g rg-k8s-demo-app2 -n aks-app2 --no-wait
+az aks start -g rg-k8s-mgmt -n aks-mgmt --no-wait
+az aks start -g rg-k8s-app1 -n aks-app1 --no-wait
+az aks start -g rg-k8s-app2 -n aks-app2 --no-wait
 
 # Bastion 삭제 (장기 미사용 시) — 삭제 시 Jump VM 접근 불가
 # 재생성: az network bastion create 또는 tofu apply
-az network bastion delete -g rg-k8s-demo-mgmt -n bastion-k8s-demo --no-wait
+az network bastion delete -g rg-k8s-mgmt -n bastion-k8s --no-wait
 ```
 
 ---
