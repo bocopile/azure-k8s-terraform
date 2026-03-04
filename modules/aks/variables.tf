@@ -3,6 +3,11 @@ variable "location" {
   type        = string
 }
 
+variable "tenant_id" {
+  description = "Azure AD tenant ID (Azure RBAC 통합용)"
+  type        = string
+}
+
 variable "zones" {
   description = "Availability zones"
   type        = list(string)

@@ -62,8 +62,7 @@ resource "azurerm_kubernetes_cluster" "aks" {
     }
 
     node_labels = {
-      "role"             = "system"
-      "kubernetes.io/os" = "linux"
+      "role" = "system"
     }
   }
 
@@ -112,10 +111,15 @@ resource "azurerm_kubernetes_cluster" "aks" {
 
   # --------------------------------------------------------
   # Azure RBAC for Kubernetes + Disable local accounts
-  # azurerm v4.x: azure_active_directory_role_based_access_control deprecated
+  # Azure AD 통합 + Azure RBAC 기반 K8s 인가
   # --------------------------------------------------------
   role_based_access_control_enabled = true
   local_account_disabled            = true
+
+  azure_active_directory_role_based_access_control {
+    azure_rbac_enabled = true
+    tenant_id          = var.tenant_id
+  }
 
   # --------------------------------------------------------
   # Node Auto-Provisioning / Karpenter (ADR-007)
@@ -149,9 +153,8 @@ resource "azurerm_kubernetes_cluster" "aks" {
 }
 
 # ============================================================
-# Ingress Node Pool (Regular VM, mgmt + app1 only)
+# Ingress Node Pool (Spot VM, mgmt + app1 only)
 # 3 nodes, zone-redundant, tainted for Istio Ingress Gateway
-# ADR-011 / C6: Regular VM으로 Eviction 방지
 # ============================================================
 
 resource "azurerm_kubernetes_cluster_node_pool" "ingress" {
@@ -164,17 +167,21 @@ resource "azurerm_kubernetes_cluster_node_pool" "ingress" {
   zones                 = var.zones
   vnet_subnet_id        = var.subnet_ids[each.value.vnet_key]
 
-  priority = "Regular"
+  priority        = "Spot"
+  eviction_policy = "Delete"
+  spot_max_price  = -1 # 시장가 사용
 
   # Taint: Istio Ingress Gateway 전용 (ARCHITECTURE.md §4.2)
-  node_taints = ["dedicated=ingress:NoSchedule"]
+  node_taints = [
+    "dedicated=ingress:NoSchedule",
+    "kubernetes.azure.com/scalesetpriority=spot:NoSchedule",
+  ]
   node_labels = {
-    "role" = "ingress"
+    "role"                                  = "ingress"
+    "kubernetes.azure.com/scalesetpriority" = "spot"
   }
 
-  upgrade_settings {
-    max_surge = "33%" # system pool과 통일
-  }
+  # Spot pool은 upgrade_settings(maxSurge/maxUnavailable) 미지원
 
   tags = var.tags
 }
@@ -276,10 +283,16 @@ resource "azurerm_linux_virtual_machine" "jumpbox" {
   }
 
   source_image_reference {
-    publisher = "Canonical"
-    offer     = "0001-com-ubuntu-server-jammy"
-    sku       = "22_04-lts-gen2"
-    version   = "22.04.202502110" # pinned for reproducibility (update periodically)
+    publisher = "resf"
+    offer     = "rockylinux-x86_64"
+    sku       = "9-base"
+    version   = "9.6.20250531" # pinned for reproducibility (update periodically)
+  }
+
+  plan {
+    name      = "9-base"
+    publisher = "resf"
+    product   = "rockylinux-x86_64"
   }
 
   # Jump VM 초기화: kubectl, az cli, helm, kubelogin, k9s, kubent, istioctl
@@ -287,23 +300,30 @@ resource "azurerm_linux_virtual_machine" "jumpbox" {
   custom_data = base64encode(<<-EOF
     #!/bin/bash
     set -e
-    export DEBIAN_FRONTEND=noninteractive
-    apt-get update -qq
 
-    # Azure CLI (Microsoft signed package)
-    curl -sL https://aka.ms/InstallAzureCLIDeb | bash
+    # Azure CLI (Microsoft signed RPM package)
+    rpm --import https://packages.microsoft.com/keys/microsoft.asc
+    cat > /etc/yum.repos.d/azure-cli.repo <<'REPO'
+[azure-cli]
+name=Azure CLI
+baseurl=https://packages.microsoft.com/yumrepos/azure-cli
+enabled=1
+gpgcheck=1
+gpgkey=https://packages.microsoft.com/keys/microsoft.asc
+REPO
+    dnf install -y azure-cli
 
     # kubectl + kubelogin (via az cli — uses Microsoft CDN)
     az aks install-cli --install-location /usr/local/bin/kubectl \
       --kubelogin-install-location /usr/local/bin/kubelogin || true
 
     # Helm 3 (pinned version)
-    HELM_VERSION="v3.17.3"
+    HELM_VERSION="v3.20.0"
     curl -fsSL "https://get.helm.sh/helm-$${HELM_VERSION}-linux-amd64.tar.gz" \
       | tar -xz --strip-components=1 -C /usr/local/bin linux-amd64/helm
 
     # k9s (pinned version)
-    K9S_VERSION="v0.50.6"
+    K9S_VERSION="v0.50.18"
     curl -fsSL "https://github.com/derailed/k9s/releases/download/$${K9S_VERSION}/k9s_Linux_amd64.tar.gz" \
       | tar -xz -C /usr/local/bin k9s
 

@@ -12,9 +12,8 @@
 resource "azurerm_federated_identity_credential" "cert_manager" {
   for_each = local.clusters
 
-  name                = "fedcred-cert-manager-${each.key}"
-  resource_group_name = module.resource_group.common_resource_group_name
-  parent_id           = module.identity.cert_manager_identity_ids[each.key]
+  name      = "fedcred-cert-manager-${each.key}"
+  parent_id = module.identity.cert_manager_identity_ids[each.key]
 
   # OIDC Issuer URL은 AKS 생성 후 확정
   issuer = module.aks.oidc_issuer_urls[each.key]

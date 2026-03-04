@@ -67,7 +67,7 @@ variable "tags" {
   description = "Common resource tags applied to all resources"
   type        = map(string)
   default = {
-    project     = "azure-k8s-demo"
+    project     = "azure-k8s"
     environment = "demo"
     managed_by  = "opentofu"
   }
@@ -86,13 +86,13 @@ variable "location" {
 variable "prefix" {
   description = "Naming prefix for all resources"
   type        = string
-  default     = "k8s-demo"
+  default     = "k8s"
 }
 
 variable "kubernetes_version" {
   description = "AKS Kubernetes version"
   type        = string
-  default     = "1.34"
+  default     = "1.35"
 }
 
 # ============================================================
@@ -102,13 +102,13 @@ variable "kubernetes_version" {
 variable "vm_size_system" {
   description = "VM size for AKS system node pool"
   type        = string
-  default     = "Standard_D2s_v5"
+  default     = "Standard_D2s_v4"
 }
 
 variable "vm_size_ingress" {
   description = "VM size for AKS ingress node pool"
   type        = string
-  default     = "Standard_D2s_v5"
+  default     = "Standard_D2s_v4"
 }
 
 variable "vm_size_jumpbox" {

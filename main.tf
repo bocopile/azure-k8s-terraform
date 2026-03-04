@@ -92,6 +92,7 @@ module "keyvault" {
   pe_subnet_id               = module.network.pe_subnet_id
   vnet_ids                   = module.network.vnet_ids
   log_analytics_workspace_id = module.monitoring.log_analytics_workspace_id
+  enable_diagnostics         = true
   tags                       = var.tags
 
   depends_on = [module.resource_group, module.network, module.monitoring]
@@ -120,8 +121,9 @@ module "identity" {
   acr_id                  = module.acr.acr_id
   vnet_ids                = module.network.vnet_ids
   key_vault_id            = module.keyvault.key_vault_id
-  aks_private_dns_zone_id = module.network.aks_private_dns_zone_id
-  dns_zone_id             = var.dns_zone_id
+  aks_private_dns_zone_id   = module.network.aks_private_dns_zone_id
+  enable_dns_role_assignment = true
+  dns_zone_id               = var.dns_zone_id
   tags                    = var.tags
 
   depends_on = [module.resource_group, module.network, module.acr, module.keyvault]
@@ -166,6 +168,7 @@ module "aks" {
   location              = local.location
   zones                 = local.zones
   prefix                = local.prefix
+  tenant_id             = var.tenant_id
   kubernetes_version    = local.kubernetes_version
   vm_sizes              = local.vm_sizes
   clusters              = local.clusters

@@ -58,14 +58,15 @@ locals {
   }
 
   # Bastion + jumpbox (mgmt VNet only, ARCHITECTURE.md §5.7)
+  # AKS subnet = 10.1.0.0/22 (10.1.0.0 ~ 10.1.3.255) 이후 대역 사용
   bastion_subnet_cidr = "10.1.100.0/26" # Azure 요구사항: /26 이상
-  jumpbox_subnet_cidr = "10.1.1.0/24"
+  jumpbox_subnet_cidr = "10.1.4.0/24"
 
   # Private Endpoint 전용 서브넷 (mgmt VNet, ARCHITECTURE.md §5.6)
-  pe_subnet_cidr = "10.1.2.0/24"
+  pe_subnet_cidr = "10.1.5.0/24"
 
   # Jump VM 고정 Private IP (Static 할당)
-  jumpbox_private_ip = "10.1.1.10"
+  jumpbox_private_ip = "10.1.4.10"
 
   # --- Resource group names ---
   rg_common = "rg-${local.prefix}-common"

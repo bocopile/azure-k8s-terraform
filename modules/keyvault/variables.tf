@@ -31,7 +31,13 @@ variable "vnet_ids" {
 variable "log_analytics_workspace_id" {
   description = "Log Analytics Workspace ID for Key Vault diagnostic settings"
   type        = string
-  default     = ""
+  default     = null
+}
+
+variable "enable_diagnostics" {
+  description = "Log Analytics 진단 설정 활성화 여부"
+  type        = bool
+  default     = true
 }
 
 variable "sku_name" {

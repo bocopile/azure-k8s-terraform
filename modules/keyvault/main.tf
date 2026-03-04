@@ -47,10 +47,10 @@ resource "azurerm_key_vault" "kv" {
 # 배포 주체에 Key Vault Administrator 부여
 # (Terraform이 시크릿/키 작성에 필요)
 resource "azurerm_role_assignment" "deployer_kv_admin" {
-  principal_id                     = data.azurerm_client_config.current.object_id
-  role_definition_name             = "Key Vault Administrator"
-  scope                            = azurerm_key_vault.kv.id
-  skip_service_principal_aad_check = true
+  principal_id         = data.azurerm_client_config.current.object_id
+  role_definition_name = "Key Vault Administrator"
+  scope                = azurerm_key_vault.kv.id
+  principal_type       = "User"
 }
 
 # ============================================================
@@ -106,7 +106,7 @@ resource "azurerm_private_endpoint" "kv" {
 # ============================================================
 
 resource "azurerm_monitor_diagnostic_setting" "kv" {
-  count = var.log_analytics_workspace_id != "" ? 1 : 0
+  count = var.enable_diagnostics ? 1 : 0
 
   name                       = "diag-${var.name}"
   target_resource_id         = azurerm_key_vault.kv.id

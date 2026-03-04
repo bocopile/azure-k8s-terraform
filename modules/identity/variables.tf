@@ -37,6 +37,12 @@ variable "aks_private_dns_zone_id" {
   default     = ""
 }
 
+variable "enable_dns_role_assignment" {
+  description = "Private DNS Zone Contributor 역할 할당 활성화 여부"
+  type        = bool
+  default     = true
+}
+
 variable "dns_zone_id" {
   description = "Azure DNS Zone resource ID for cert-manager (empty string = skip)"
   type        = string

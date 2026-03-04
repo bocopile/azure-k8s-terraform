@@ -44,6 +44,21 @@ resource "azurerm_user_assigned_identity" "cert_manager" {
 }
 
 # ============================================================
+# Role Assignments — Control Plane → Managed Identity Operator (Kubelet)
+# AKS가 Kubelet Identity를 노드에 할당하려면 이 권한이 필요
+# ============================================================
+
+resource "azurerm_role_assignment" "cp_mi_operator_kubelet" {
+  for_each = var.clusters
+
+  principal_id         = azurerm_user_assigned_identity.control_plane[each.key].principal_id
+  role_definition_name = "Managed Identity Operator"
+  scope                = azurerm_user_assigned_identity.kubelet[each.key].id
+
+  skip_service_principal_aad_check = true
+}
+
+# ============================================================
 # Role Assignments — Kubelet → AcrPull
 # ============================================================
 
@@ -79,7 +94,7 @@ resource "azurerm_role_assignment" "cp_network_contributor" {
 # ============================================================
 
 resource "azurerm_role_assignment" "cp_dns_contributor" {
-  for_each = var.aks_private_dns_zone_id != "" ? var.clusters : {}
+  for_each = var.enable_dns_role_assignment ? var.clusters : {}
 
   principal_id         = azurerm_user_assigned_identity.control_plane[each.key].principal_id
   role_definition_name = "Private DNS Zone Contributor"
