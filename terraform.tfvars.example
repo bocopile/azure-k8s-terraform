@@ -1,37 +1,41 @@
 # ============================================================
 # terraform.tfvars.example
-# Copy to terraform.tfvars and fill in your values.
-# DO NOT commit terraform.tfvars (it may contain sensitive data).
+# terraform.tfvars로 복사한 뒤 실제 값을 입력하세요.
+# 민감 정보가 포함될 수 있으므로 terraform.tfvars는 절대 commit 하지 마세요.
 # ============================================================
 
-# Azure Subscription & Tenant
+# Azure 구독 및 테넌트 (az account show 로 확인)
 subscription_id = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
 tenant_id       = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
 
-# Azure Container Registry name (globally unique, alphanumeric, 5-50 chars)
+# Azure Container Registry 이름 (전역 고유, 영숫자만, 5-50자)
 acr_name = "acryk8sdemo12345"
 
-# Key Vault suffix for global uniqueness (3-8 alphanumeric chars)
+# Key Vault 접미사 — 전역 고유 이름 생성용 (영숫자 3-8자)
 kv_suffix = "abc123"
 
-# Jump VM SSH access
+# Jump VM SSH 접속 설정
+# 키가 없으면 아래 명령으로 생성:
+#   ssh-keygen -t rsa -b 4096 -f ~/.ssh/id_rsa_jumpbox -C "jumpbox"
+# 생성 후 공개키 내용을 아래에 붙여넣기:
+#   cat ~/.ssh/id_rsa_jumpbox.pub
 jumpbox_admin_username = "azureadmin"
 jumpbox_ssh_public_key = "ssh-rsa AAAA... your-public-key-here"
 
-# DNS Zone for cert-manager DNS-01 challenge (optional, leave empty to skip)
+# cert-manager DNS-01 챌린지용 DNS Zone (선택 사항, 비워두면 생략)
 # dns_zone_id = "/subscriptions/.../resourceGroups/.../providers/Microsoft.Network/dnsZones/example.com"
 
 # --- 환경 설정 (기본값이 있어 선택 사항) ---
 # location              = "koreacentral"
-# prefix                = "k8s-demo"
-# kubernetes_version    = "1.34"
+# prefix                = "k8s"
+# kubernetes_version    = "1.35"
 
-# --- VM SKU ---
-# vm_size_system        = "Standard_D2s_v5"
-# vm_size_ingress       = "Standard_D2s_v5"
+# --- VM 크기 ---
+# vm_size_system        = "Standard_D2s_v4"
+# vm_size_ingress       = "Standard_D2s_v4"
 # vm_size_jumpbox       = "Standard_B2s"
 
-# --- SKU / Tier ---
+# --- SKU / 가격 등급 ---
 # aks_sku_tier          = "Standard"     # Free | Standard
 # acr_sku               = "Basic"        # Basic | Standard | Premium
 # bastion_sku           = "Basic"        # Basic | Standard
@@ -52,9 +56,9 @@ jumpbox_ssh_public_key = "ssh-rsa AAAA... your-public-key-here"
 # enable_grafana            = true
 # enable_sentinel           = false
 
-# Resource tags
+# 리소스 태그
 tags = {
-  project     = "azure-k8s-demo"
+  project     = "azure-k8s"
   environment = "demo"
   managed_by  = "opentofu"
   owner       = "your-name"

@@ -14,7 +14,7 @@
 #
 # Usage:
 #   chmod +x scripts/pre-destroy.sh
-#   ./scripts/pre-destroy.sh [--cluster all] [--prefix k8s-demo] [--dry-run]
+#   ./scripts/pre-destroy.sh [--cluster all] [--prefix k8s] [--dry-run]
 #
 # Prerequisites:
 #   - kubectl, az, kubelogin 설치됨
@@ -27,7 +27,7 @@ set -euo pipefail
 # --- Default values ---
 CLUSTER_TARGET="all"
 DRY_RUN=false
-PREFIX="${PREFIX:-k8s-demo}"
+PREFIX="${PREFIX:-k8s}"
 
 # --- Parse arguments ---
 while [[ $# -gt 0 ]]; do
@@ -46,7 +46,7 @@ while [[ $# -gt 0 ]]; do
       ;;
     *)
       echo "Unknown argument: $1" >&2
-      echo "Usage: $0 [--cluster all|mgmt|app1|app2] [--prefix k8s-demo] [--dry-run]" >&2
+      echo "Usage: $0 [--cluster all|mgmt|app1|app2] [--prefix k8s] [--dry-run]" >&2
       exit 1
       ;;
   esac

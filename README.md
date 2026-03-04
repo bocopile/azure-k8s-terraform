@@ -13,7 +13,7 @@ Azure 관리형 서비스를 최대한 활용하고, Spot VM + NAP(Karpenter)으
 | 항목 | 값 |
 |---|---|
 | IaC 도구 | OpenTofu 1.11+ |
-| AKS 버전 | v1.34 |
+| AKS 버전 | v1.35 |
 | 리전 | Korea Central (AZ 1/2/3) |
 | 네트워크 | Azure CNI Overlay + Managed Cilium |
 | 노드 프로비저닝 | NAP (Node Auto-Provisioning / Karpenter) |
@@ -141,6 +141,9 @@ helm version
 az login
 az account set --subscription "<SUBSCRIPTION_ID>"
 
+# subscription_id / tenant_id 확인 (terraform.tfvars에 입력할 값)
+az account show --query "{subscription_id:id, tenant_id:tenantId}" -o table
+
 # 2. Resource Provider 등록
 az provider register --namespace Microsoft.ContainerService
 az provider register --namespace Microsoft.Monitor
@@ -154,19 +157,84 @@ az provider register --namespace Microsoft.ManagedIdentity
 az provider register --namespace Microsoft.Network
 az provider register --namespace Microsoft.Storage
 
-# 3. NAP (Karpenter) Preview Feature 등록 — 필수
-az feature register \
-  --namespace Microsoft.ContainerService \
-  --name NodeAutoProvisioningPreview
+# 3. NAP (Karpenter)는 GA되어 별도 Feature Flag 등록이 불필요합니다.
+#    위 Resource Provider 등록만 완료하면 node_provisioning_profile { mode = "Auto" } 사용 가능합니다.
+```
 
-# 등록 완료 확인 (Registered 상태까지 대기)
-az feature show \
-  --namespace Microsoft.ContainerService \
-  --name NodeAutoProvisioningPreview \
-  --query properties.state -o tsv
+### vCPU 쿼터 확인 및 증가
 
-# Feature 등록 후 Provider 재등록
-az provider register --namespace Microsoft.ContainerService
+AKS 클러스터 3개를 생성하려면 충분한 vCPU 쿼터가 필요합니다.
+
+```bash
+# 현재 쿼터 확인 (Dedicated + Spot 모두)
+az vm list-usage --location koreacentral -o table \
+  | grep -E "DSv4|Total Regional|Low-priority"
+```
+
+**필요 쿼터 (기본 설정 기준):**
+
+| 쿼터 | 리소스 이름 | 필요량 | 산출 근거 |
+|---|---|---|---|
+| Standard DSv4 Family vCPUs | `standardDSv4Family` | 20+ | 3클러스터 × system 3노드 × 2vCPU = 18 |
+| Total Regional vCPUs | `cores` | 30+ | DSv4 18 + Spot 12 + Jump VM 2 |
+| Total Regional Low-priority (Spot) vCPUs | `lowPriorityCores` | 20+ | 2클러스터(mgmt,app1) × ingress 3노드 × 2vCPU = 12 |
+
+> **Spot(Low-priority) 쿼터란?**
+> Ingress 노드 풀은 비용 절감을 위해 Spot VM을 사용합니다.
+> Spot VM은 Dedicated 쿼터와 별도인 **Low-priority 쿼터**를 소비합니다.
+> 기본 할당량이 매우 낮으므로(보통 3) 반드시 증가가 필요합니다.
+
+#### 쿼터 증가 방법 (CLI)
+
+쿼터가 부족하면 `tofu apply` 시 `ErrCode_InsufficientVCPUQuota` 또는
+`OperationNotAllowed (LowPriorityCores)` 에러가 발생합니다.
+
+```bash
+# 1. quota 확장 설치 (최초 1회)
+az extension add --name quota
+
+# 2. 구독 ID 변수 설정
+SUBSCRIPTION_ID=$(az account show --query id -o tsv)
+SCOPE="/subscriptions/${SUBSCRIPTION_ID}/providers/Microsoft.Compute/locations/koreacentral"
+
+# 3. Standard DSv4 Family → 20 vCPU
+az quota create \
+  --resource-name "standardDSv4Family" \
+  --scope "$SCOPE" \
+  --limit-object value=20 \
+  --resource-type "dedicated"
+
+# 4. Total Regional vCPU → 30
+az quota create \
+  --resource-name "cores" \
+  --scope "$SCOPE" \
+  --limit-object value=30 \
+  --resource-type "dedicated"
+
+# 5. Low-priority (Spot) vCPU → 20
+az quota create \
+  --resource-name "lowPriorityCores" \
+  --scope "$SCOPE" \
+  --limit-object value=20 \
+  --resource-type "dedicated"
+
+# 6. 반영 확인 (수 초 ~ 수 분 소요)
+az vm list-usage --location koreacentral -o table \
+  | grep -E "DSv4 Family|Total Regional|Low-priority"
+```
+
+> 다른 VM 패밀리를 사용하는 경우 `--resource-name`을 해당 패밀리로 변경합니다.
+> (예: `standardDSv5Family`, `standardDASv4Family` 등)
+>
+> 쿼터 변경이 즉시 반영되지 않으면 수 분 후 다시 확인하세요.
+> 일부 구독에서는 자동 승인이 아닌 수동 검토가 필요할 수 있습니다.
+
+### Rocky Linux Marketplace 약관 동의
+
+Jump VM이 Rocky Linux를 사용하므로 최초 배포 전 약관 동의가 필요합니다.
+
+```bash
+az vm image terms accept --publisher resf --offer rockylinux-x86_64 --plan 9-base
 ```
 
 ### 권한 요구사항
@@ -200,18 +268,36 @@ tenant_id       = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
 acr_name  = "myacr<유니크문자열>"
 
 # Key Vault + Storage Account 접미사 (3-8 alphanumeric)
-# 최종 이름: kv-k8s-demo-<kv_suffix> / stk8sdemo<kv_suffix>fl
+# 최종 이름: kv-k8s-<kv_suffix> / stk8s<kv_suffix>fl
 kv_suffix = "abc123"
 
-# SSH 공개키 문자열 (파일 경로 아님 — cat ~/.ssh/id_rsa.pub 출력값)
+# SSH 공개키 문자열 (파일 경로 아님 — cat ~/.ssh/id_rsa_jumpbox.pub 출력값)
 jumpbox_ssh_public_key = "ssh-rsa AAAA..."
 ```
+
+> **SSH 키가 없는 경우 (No such file or directory)**
+>
+> ```bash
+> # 1. 키 쌍 생성 (비밀번호 없이 바로 Enter)
+> ssh-keygen -t rsa -b 4096 -f ~/.ssh/id_rsa_jumpbox -C "jumpbox"
+>
+> # 2. 공개키 내용 확인 → 출력값 전체를 jumpbox_ssh_public_key에 붙여넣기
+> cat ~/.ssh/id_rsa_jumpbox.pub
+> ```
+>
+> - `~/.ssh` 디렉토리가 없으면 `ssh-keygen`이 자동 생성합니다.
+> - 기존 `~/.ssh/id_rsa.pub`가 있다면 그대로 사용해도 됩니다.
 
 ### 2. AKS 버전 확인
 
 ```bash
+# 마이너 버전 목록 확인
 az aks get-versions --location koreacentral \
-  --query "orchestrators[].orchestratorVersion" -o table
+  --query "values[].version" -o table
+
+# 패치 버전까지 상세 확인
+az aks get-versions --location koreacentral \
+  --query "values[].patchVersions.keys(@)[]" -o table
 ```
 
 `variables.tf`의 `kubernetes_version` 기본값(또는 `terraform.tfvars` 오버라이드)이 가용 버전 목록에 있는지 확인합니다.
@@ -237,6 +323,32 @@ tofu import azurerm_network_watcher.nw \
 tofu apply tfplan
 ```
 
+> **재배포 시 주의사항 (RG 삭제 후 재생성)**
+>
+> Subscription 레벨 리소스는 RG 삭제 시 자동으로 사라지지 않습니다.
+> 기존 배포를 삭제 후 재배포할 때는 아래 정리를 먼저 수행하세요.
+>
+> ```bash
+> # 1. 기존 구독 레벨 Diagnostic Setting 삭제 (Activity Log → LAW)
+> az monitor diagnostic-settings delete \
+>   --name "diag-activity-to-law" \
+>   --resource "/subscriptions/<SUBSCRIPTION_ID>"
+>
+> # 2. 기존 Terraform state 초기화
+> rm -f terraform.tfstate terraform.tfstate.backup \
+>      terraform.tfstate.old terraform.tfstate.backup.old
+>
+> # 3. 재초기화 및 배포
+> tofu init && tofu plan -out=tfplan && tofu apply tfplan
+> ```
+>
+> 또는 import로 기존 리소스를 state에 등록할 수도 있습니다:
+> ```bash
+> tofu import 'module.monitoring.azurerm_monitor_diagnostic_setting.activity_log' \
+>   '/subscriptions/<SUBSCRIPTION_ID>|diag-activity-to-law'
+> ```
+```
+
 ---
 
 ## Phase 2 — 애드온 설치
@@ -257,7 +369,7 @@ cd ~/azure-k8s-terraform
 # 특정 클러스터만
 ./addons/install.sh --cluster mgmt
 
-# 커스텀 prefix + location 사용 (기본값: k8s-demo / koreacentral)
+# 커스텀 prefix + location 사용 (기본값: k8s / koreacentral)
 ./addons/install.sh --cluster all --prefix my-project --location koreacentral
 
 # Dry-run (실제 설치 없이 확인)
@@ -305,7 +417,7 @@ cd ~/azure-k8s-terraform
 | `dns_zone_id` | ❌ | `""` | cert-manager DNS-01용 Azure DNS Zone ID |
 | `tags` | ❌ | project/env/managed_by | 공통 리소스 태그 |
 | `location` | ❌ | `koreacentral` | Azure 리전 |
-| `prefix` | ❌ | `k8s-demo` | 리소스 이름 접두사 |
+| `prefix` | ❌ | `k8s` | 리소스 이름 접두사 |
 | `kubernetes_version` | ❌ | `1.34` | AKS Kubernetes 버전 |
 | `vm_size_system` | ❌ | `Standard_D2s_v5` | System 노드풀 VM SKU |
 | `vm_size_ingress` | ❌ | `Standard_D2s_v5` | Ingress 노드풀 VM SKU |
