@@ -35,15 +35,12 @@
 # ============================================================
 
 terraform {
-  # ── Active: Local backend (dev/PoC) ──
-  backend "local" {}
-
-  # ── 전환 대상: Azure Blob Storage backend ──
-  # backend "azurerm" {
-  #   resource_group_name  = "rg-tfstate"
-  #   storage_account_name = "<globally-unique-name>"  # 실제 Storage Account 이름으로 변경
-  #   container_name       = "tfstate"
-  #   key                  = "azure-k8s/main.tfstate"
-  #   use_azuread_auth     = true  # MSI/OIDC 인증 — Access Key 불필요
-  # }
+  # ── Active: Azure Blob Storage backend ──
+  backend "azurerm" {
+    resource_group_name  = "rg-tfstate"
+    storage_account_name = "stk8stfstate2cfd"
+    container_name       = "tfstate"
+    key                  = "azure-k8s/main.tfstate"
+    use_azuread_auth     = true  # MSI/OIDC 인증 — Access Key 불필요
+  }
 }
