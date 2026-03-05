@@ -26,12 +26,16 @@ Step 4: 잔여 리소스 확인 및 수동 정리
 자동화 스크립트를 제공한다:
 
 ```bash
-# Jump VM 또는 VPN 접속 환경에서 실행
+# az login 완료 환경이면 어디서나 실행 가능 (VPN / Jump VM 불필요)
+# kubectl 명령은 az aks command invoke를 통해 Azure API 경유 실행됨
 chmod +x scripts/pre-destroy.sh
 ./scripts/pre-destroy.sh [--cluster all] [--prefix k8s] [--dry-run]
 ```
 
 ### 수동 정리가 필요한 경우
+
+> kubectl 명령은 `az aks command invoke`를 통해 실행하므로 VPN / Jump VM 불필요.
+> `az` CLI + `az login`만 있으면 충분하다.
 
 ```bash
 # 각 클러스터에 대해 실행 (mgmt, app1, app2)
@@ -39,13 +43,13 @@ CLUSTER="mgmt"
 RG="rg-k8s-${CLUSTER}"
 AKS="aks-${CLUSTER}"
 
-az aks get-credentials -g "${RG}" -n "${AKS}"
-
 # 1) LoadBalancer 타입 Service 삭제 (Azure LB 자동 제거)
-kubectl delete svc --all-namespaces -l type=LoadBalancer --ignore-not-found
+az aks command invoke -g "${RG}" -n "${AKS}" --command \
+  'kubectl delete svc -A --all --field-selector spec.type=LoadBalancer --ignore-not-found'
 
 # 2) PersistentVolumeClaim 삭제 (Azure Disk/File 해제)
-kubectl delete pvc --all-namespaces --all --ignore-not-found
+az aks command invoke -g "${RG}" -n "${AKS}" --command \
+  'for ns in $(kubectl get ns -o jsonpath="{.items[*].metadata.name}"); do kubectl delete pvc --all -n "$ns" --ignore-not-found --timeout=120s; done'
 
 # 3) Flux GitOps Extension 제거
 az k8s-extension delete -g "${RG}" -c "${AKS}" \
@@ -59,7 +63,9 @@ az k8s-extension delete -g "${RG}" -c "${AKS}" \
 # Backup Instance가 있으면 Vault 삭제가 차단됨
 az dataprotection backup-instance list \
   -g rg-k8s-common --vault-name bv-k8s -o table
-# 있다면: az dataprotection backup-instance delete ...
+# 있다면:
+az dataprotection backup-instance delete \
+  -g rg-k8s-common --vault-name bv-k8s -n <instance-name> --yes
 ```
 
 ---

@@ -258,13 +258,29 @@ az role assignment list \
 cp terraform.tfvars.example terraform.tfvars
 ```
 
+#### subscription_id / tenant_id 조회
+
+```bash
+# 현재 로그인된 구독의 ID와 테넌트 ID 한 번에 확인
+az account show --query "{subscription_id:id, tenant_id:tenantId}" -o table
+
+# 여러 구독이 있는 경우 — 전체 목록 확인 후 선택
+az account list --query "[].{name:name, id:id, state:state}" -o table
+az account set --subscription "<SUBSCRIPTION_ID>"
+
+# 선택된 구독 최종 확인
+az account show --query "{subscription_id:id, tenant_id:tenantId}" -o tsv
+```
+
 `terraform.tfvars` 필수 항목:
 
 ```hcl
+# az account show 출력값을 그대로 붙여넣기
 subscription_id = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
 tenant_id       = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
 
 # 전세계 유니크 이름 (5-50 alphanumeric)
+# 예: "acrk8s" + 구독 ID 뒷 6자리
 acr_name  = "myacr<유니크문자열>"
 
 # Key Vault + Storage Account 접미사 (3-8 alphanumeric)
@@ -321,6 +337,174 @@ tofu import azurerm_network_watcher.nw \
 
 # 배포 (약 25~35분 소요)
 tofu apply tfplan
+```
+
+### 4. 배포 후 모니터링 체크리스트
+
+`tofu apply` 완료 직후 아래 순서로 정상 여부를 확인한다.
+이상이 발견되면 해당 체크포인트에서 멈추고 [크리티컬 장애 대응](#크리티컬-장애-대응) 절차를 따른다.
+
+#### 4-1. 노드 상태
+
+```bash
+# 3개 클러스터 모두 Ready 노드 확인
+for c in mgmt app1 app2; do
+  echo "=== aks-${c} ==="
+  az aks command invoke -g "rg-k8s-${c}" -n "aks-${c}" \
+    --command "kubectl get nodes -o wide"
+done
+```
+
+| 기대값 | 이상 징후 |
+|--------|-----------|
+| 각 클러스터 system 노드 3개 Ready | NotReady / Pending 노드 존재 |
+| ingress 노드 Spot 할당 완료 (mgmt, app1) | 노드 0개 (Spot 자원 부족) |
+
+---
+
+#### 4-2. 시스템 Pod 상태
+
+```bash
+for c in mgmt app1 app2; do
+  echo "=== aks-${c} ==="
+  az aks command invoke -g "rg-k8s-${c}" -n "aks-${c}" \
+    --command "kubectl get pods -n kube-system --field-selector=status.phase!=Running"
+done
+```
+
+| 기대값 | 이상 징후 |
+|--------|-----------|
+| kube-system Pod 모두 Running | CrashLoopBackOff / ImagePullBackOff |
+| coredns / cilium-agent Ready | Pending 상태 지속 (노드 자원 부족) |
+
+---
+
+#### 4-3. 네트워크 연결성
+
+```bash
+# VNet 피어링 상태 확인 (Connected 이어야 함)
+az network vnet peering list -g rg-k8s-mgmt --vnet-name vnet-mgmt -o table
+az network vnet peering list -g rg-k8s-app1 --vnet-name vnet-app1 -o table
+
+# Private DNS Zone 링크 확인
+az network private-dns link vnet list \
+  -g rg-k8s-common \
+  -z privatelink.koreacentral.azmk8s.io \
+  -o table
+```
+
+| 기대값 | 이상 징후 |
+|--------|-----------|
+| Peering Status: Connected | Disconnected / Initiated |
+| DNS 링크 3개 (mgmt / app1 / app2) | 링크 누락 → kubectl FQDN 해석 실패 |
+
+---
+
+#### 4-4. 공유 서비스 상태
+
+```bash
+# Key Vault Private Endpoint 연결
+az network private-endpoint show \
+  -g rg-k8s-common -n pe-kv-k8s \
+  --query "customDnsConfigs" -o table
+
+# ACR 접근 (Kubelet Identity 권한 확인)
+az acr check-health -n <acr_name> --ignore-errors
+
+# Managed Grafana (배포 완료 URL 출력)
+tofu output grafana_endpoint
+```
+
+---
+
+#### 4-5. Workload Identity 페더레이션
+
+```bash
+# federation.tf 로 생성된 Federated Credential 확인
+az identity federated-credential list \
+  --identity-name id-k8s-workload \
+  -g rg-k8s-common \
+  -o table
+```
+
+---
+
+### 크리티컬 장애 대응
+
+아래 상황이 발생하면 **`tofu apply` 를 중단하고** 원인을 제거한 뒤 재시도한다.
+
+#### STOP 기준
+
+| 증상 | 판단 기준 | 대응 |
+|------|-----------|------|
+| 노드 NotReady 지속 (5분+) | `kubectl describe node` 에서 kubelet 오류 | 아래 [A] 참조 |
+| AKS 프로비저닝 실패 | `tofu apply` 에러 또는 Portal에서 Failed | 아래 [B] 참조 |
+| Spot 노드 0개 (할당 불가) | ingress 노드풀 nodeCount=0 | 아래 [C] 참조 |
+| VNet Peering Disconnected | 클러스터 간 통신 불가 | 아래 [D] 참조 |
+| Backup Vault 생성 실패 | `tofu apply` 에서 DataProtection 오류 | 아래 [E] 참조 |
+
+---
+
+**[A] 노드 NotReady**
+
+```bash
+# 노드 상태 상세 확인
+az aks command invoke -g rg-k8s-<cluster> -n aks-<cluster> \
+  --command "kubectl describe node <node-name> | tail -30"
+
+# AKS 진단 로그 확인 (Control Plane)
+az aks show -g rg-k8s-<cluster> -n aks-<cluster> \
+  --query "provisioningState"
+
+# 대응: 노드풀 업그레이드/재시작
+az aks nodepool upgrade \
+  -g rg-k8s-<cluster> -n aks-<cluster> \
+  --nodepool-name system --kubernetes-version <current-version>
+```
+
+**[B] AKS 프로비저닝 실패**
+
+```bash
+# 실패 원인 확인
+az aks show -g rg-k8s-<cluster> -n aks-<cluster> \
+  --query "{state:provisioningState, error:powerState}" -o json
+
+# state 충돌 시: state에서 제거 후 import 또는 재생성
+tofu state rm module.aks_<cluster>.azurerm_kubernetes_cluster.<cluster>
+tofu apply -target=module.aks_<cluster>
+```
+
+**[C] Spot 노드 할당 불가**
+
+```bash
+# 현재 Spot 할당 가능 SKU 확인
+az vm list-skus --location koreacentral \
+  --query "[?resourceType=='virtualMachines' && contains(name,'Standard_D2s')]" \
+  -o table
+
+# 임시 대응: ingress 노드풀을 Dedicated로 전환 (variables.tf 수정 후 apply)
+# vm_size_ingress = "Standard_D2s_v5"  # priority = Regular 로 변경
+```
+
+**[D] VNet Peering Disconnected**
+
+```bash
+# 피어링 재연결 (tofu taint 후 재생성)
+tofu taint module.network_mgmt.azurerm_virtual_network_peering.mgmt_to_app1
+tofu apply -target=module.network_mgmt
+```
+
+**[E] Backup Vault 생성 실패**
+
+```bash
+# DataProtection Provider 등록 상태 확인
+az provider show -n Microsoft.DataProtection \
+  --query "registrationState" -o tsv
+
+# Registered 아니면:
+az provider register --namespace Microsoft.DataProtection
+# 등록 완료(1~2분) 후 재시도
+tofu apply -target=module.backup
 ```
 
 > **재배포 시 주의사항 (RG 삭제 후 재생성)**
@@ -491,12 +675,16 @@ tofu output phase2_command
 ## 인프라 삭제
 
 ```bash
-# 전체 리소스 삭제 (순서 자동 처리)
-tofu destroy
+# Step 1: K8s 레벨 리소스 사전 정리 (VPN / Jump VM 불필요 — az aks command invoke 사용)
+./scripts/pre-destroy.sh --dry-run   # 삭제 대상 확인
+./scripts/pre-destroy.sh             # 실제 정리 실행
 
-# 주의: Backup Vault soft_delete = false (demo 설정)
-# prod 환경에서는 BackupInstance 먼저 제거 후 destroy 권장
+# Step 2: 인프라 삭제
+tofu plan -destroy                   # 삭제 대상 검토
+tofu destroy
 ```
+
+> 자세한 삭제 절차 (Key Vault purge, 잔여 리소스 확인 등)는 [`DESTROY.md`](DESTROY.md) 참조.
 
 ---
 
@@ -532,7 +720,7 @@ rm terraform.tfstate terraform.tfstate.backup
 | Key Vault 이름 충돌 (`SoftDeleted`) | 이전 삭제 후 soft-delete 상태 잔존 | `az keyvault purge --name <kv-name>` |
 | AKS 버전 미지원 | 리전별 가용 버전 상이 | `az aks get-versions --location koreacentral` 확인 |
 | VM 할당량 초과 | 구독별 vCPU 할당량 제한 | `az vm list-usage --location koreacentral -o table` 확인 후 할당량 증가 요청 |
-| Private Cluster API 접근 불가 | Jump VM 또는 VPN 경유 필요 | Azure Bastion → Jump VM으로 접속 후 kubectl 사용 |
+| Private Cluster API 접근 불가 | Jump VM 또는 VPN 경유 필요 | ① Azure Bastion → Jump VM 접속 후 kubectl 사용, 또는 ② `az aks command invoke`로 VPN 없이 직접 실행 |
 | Addon 스크립트 prefix 불일치 | `install.sh --prefix`와 Terraform `var.prefix` 불일치 | 동일 prefix 값 사용 필수 |
 
 ---

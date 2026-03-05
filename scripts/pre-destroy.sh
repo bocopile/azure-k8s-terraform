@@ -5,6 +5,9 @@
 # tofu state 외부에서 생성된 Azure 리소스를 정리하여
 # tofu destroy 시 충돌/잔여 리소스를 방지한다.
 #
+# kubectl 명령은 az aks command invoke를 통해 실행하므로
+# VPN / Jump VM 없이 어느 환경에서나 동작한다.
+#
 # 정리 대상:
 #   1. LoadBalancer Service → Azure LB 해제
 #   2. PersistentVolumeClaim → Azure Disk/File 해제
@@ -14,12 +17,11 @@
 #
 # Usage:
 #   chmod +x scripts/pre-destroy.sh
-#   ./scripts/pre-destroy.sh [--cluster all] [--prefix k8s] [--dry-run]
+#   ./scripts/pre-destroy.sh [--cluster all|mgmt|app1|app2] [--prefix k8s] [--dry-run]
 #
 # Prerequisites:
-#   - kubectl, az, kubelogin 설치됨
-#   - az login 완료
-#   - Jump VM 또는 AKS Private Cluster 접근 가능 환경
+#   - az CLI 설치 및 az login 완료
+#   (kubectl / kubelogin 불필요 — az aks command invoke 사용)
 # ============================================================
 
 set -euo pipefail
@@ -61,21 +63,37 @@ fi
 
 log() { echo "[$(date '+%Y-%m-%dT%H:%M:%S')] $*"; }
 
-run() {
+# az aks command invoke 래퍼
+# - Azure API를 통해 kubectl 명령을 실행하므로 VPN 불필요
+# - DRY_RUN=true 이면 실행할 명령을 출력만 하고 스킵
+# - 내부 명령 실패 시 exit code를 그대로 전파 (set -e 연동)
+# Usage: aks_invoke <rg> <aks> <command>
+aks_invoke() {
+  local rg="$1" aks="$2" cmd="$3"
+
   if [[ "${DRY_RUN}" == "true" ]]; then
-    echo "[DRY-RUN] $*"
-  else
-    "$@"
+    log "  [DRY-RUN] invoke on ${aks}: ${cmd}"
+    return 0
   fi
+
+  az aks command invoke \
+    --resource-group "${rg}" \
+    --name "${aks}" \
+    --command "${cmd}" \
+    --query "logs" \
+    --output tsv
 }
 
 # --- Prerequisite check ---
-for cmd in kubectl az kubelogin; do
-  if ! command -v "$cmd" &>/dev/null; then
-    echo "ERROR: '$cmd' is not installed." >&2
-    exit 1
-  fi
-done
+if ! command -v az &>/dev/null; then
+  echo "ERROR: 'az' is not installed." >&2
+  exit 1
+fi
+
+if ! az account show &>/dev/null; then
+  echo "ERROR: Not logged in to Azure. Run 'az login' first." >&2
+  exit 1
+fi
 
 # --- 클러스터 목록 결정 ---
 if [[ "${CLUSTER_TARGET}" == "all" ]]; then
@@ -105,42 +123,49 @@ for cluster in "${CLUSTERS[@]}"; do
     continue
   fi
 
-  # kubeconfig 획득
-  log "  Getting credentials for ${AKS}..."
-  run az aks get-credentials -g "${RG}" -n "${AKS}" --overwrite-existing
-
   # 1) LoadBalancer Service 삭제
+  # go-template 사용 (jq 의존성 없음 — az aks command invoke 환경에서도 안전)
   log "  [1/4] Deleting LoadBalancer Services..."
-  if [[ "${DRY_RUN}" == "true" ]]; then
-    kubectl get svc --all-namespaces -o wide 2>/dev/null | grep LoadBalancer || echo "  (no LoadBalancer services)"
+  # shellcheck disable=SC2016
+  LB_CMD='svcs=$(kubectl get svc -A \
+    -o go-template='"'"'{{range .items}}{{if eq .spec.type "LoadBalancer"}}{{.metadata.namespace}} {{.metadata.name}}{{"\n"}}{{end}}{{end}}'"'"')
+  if [ -z "$svcs" ]; then
+    echo "No LoadBalancer services found"
   else
-    LB_SVCS=$(kubectl get svc --all-namespaces -o json 2>/dev/null \
-      | jq -r '.items[] | select(.spec.type=="LoadBalancer") | "\(.metadata.namespace)/\(.metadata.name)"' 2>/dev/null || true)
-    if [[ -n "${LB_SVCS}" ]]; then
-      for svc in ${LB_SVCS}; do
-        ns="${svc%%/*}"
-        name="${svc##*/}"
-        log "    Deleting svc/${name} in ${ns}"
-        kubectl delete svc "${name}" -n "${ns}" --ignore-not-found --timeout=60s || true
-      done
-    else
-      log "    No LoadBalancer services found"
-    fi
-  fi
+    echo "$svcs" | while read -r ns name; do
+      echo "Deleting svc/$name in $ns"
+      kubectl delete svc "$name" -n "$ns" --ignore-not-found --timeout=60s
+    done
+  fi'
+  aks_invoke "${RG}" "${AKS}" "${LB_CMD}"
 
   # 2) PVC 삭제 (Azure Disk/File 해제)
   log "  [2/4] Deleting PersistentVolumeClaims..."
-  run kubectl delete pvc --all-namespaces --all --ignore-not-found --timeout=120s || true
+  # shellcheck disable=SC2016
+  PVC_CMD='for ns in $(kubectl get ns -o jsonpath="{.items[*].metadata.name}"); do
+    kubectl delete pvc --all -n "$ns" --ignore-not-found --timeout=120s
+  done'
+  aks_invoke "${RG}" "${AKS}" "${PVC_CMD}"
 
-  # 3) Flux Extension 제거
+  # 3) Flux Extension 제거 (az CLI — 존재하지 않으면 무시)
   log "  [3/4] Removing Flux extension..."
-  run az k8s-extension delete -g "${RG}" -c "${AKS}" \
-    --cluster-type managedClusters -n flux --yes 2>/dev/null || true
+  if [[ "${DRY_RUN}" == "true" ]]; then
+    log "  [DRY-RUN] az k8s-extension delete -g ${RG} -c ${AKS} --cluster-type managedClusters -n flux --yes"
+  else
+    az k8s-extension delete \
+      -g "${RG}" -c "${AKS}" \
+      --cluster-type managedClusters -n flux --yes 2>/dev/null || true
+  fi
 
-  # 4) AKS Backup Extension 제거
+  # 4) AKS Backup Extension 제거 (az CLI — 존재하지 않으면 무시)
   log "  [4/4] Removing AKS Backup extension..."
-  run az k8s-extension delete -g "${RG}" -c "${AKS}" \
-    --cluster-type managedClusters -n azure-aks-backup --yes 2>/dev/null || true
+  if [[ "${DRY_RUN}" == "true" ]]; then
+    log "  [DRY-RUN] az k8s-extension delete -g ${RG} -c ${AKS} --cluster-type managedClusters -n azure-aks-backup --yes"
+  else
+    az k8s-extension delete \
+      -g "${RG}" -c "${AKS}" \
+      --cluster-type managedClusters -n azure-aks-backup --yes 2>/dev/null || true
+  fi
 
   echo ""
 done
@@ -161,9 +186,14 @@ if az dataprotection backup-vault show -g "${VAULT_RG}" -n "${VAULT_NAME}" &>/de
   if [[ -n "${INSTANCES}" ]]; then
     for instance in ${INSTANCES}; do
       log "  Deleting backup instance: ${instance}"
-      run az dataprotection backup-instance delete \
-        -g "${VAULT_RG}" --vault-name "${VAULT_NAME}" \
-        -n "${instance}" --yes || true
+      if [[ "${DRY_RUN}" == "true" ]]; then
+        log "  [DRY-RUN] az dataprotection backup-instance delete -g ${VAULT_RG} --vault-name ${VAULT_NAME} -n ${instance} --yes"
+      else
+        # || true 없음 — 실패 시 스크립트 중단 (tofu destroy 진행 차단)
+        az dataprotection backup-instance delete \
+          -g "${VAULT_RG}" --vault-name "${VAULT_NAME}" \
+          -n "${instance}" --yes
+      fi
     done
   else
     log "  No backup instances found"

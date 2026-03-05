@@ -153,8 +153,10 @@ resource "azurerm_kubernetes_cluster" "aks" {
 }
 
 # ============================================================
-# Ingress Node Pool (Spot VM, mgmt + app1 only)
+# Ingress Node Pool (Regular/Dedicated, mgmt + app1 only)
 # 3 nodes, zone-redundant, tainted for Istio Ingress Gateway
+# NOTE: Spot → Regular 전환 (lowPriorityCores 쿼터 부족 대응)
+#       쿼터 증가 후 priority = "Spot" 으로 되돌릴 수 있음
 # ============================================================
 
 resource "azurerm_kubernetes_cluster_node_pool" "ingress" {
@@ -167,21 +169,21 @@ resource "azurerm_kubernetes_cluster_node_pool" "ingress" {
   zones                 = var.zones
   vnet_subnet_id        = var.subnet_ids[each.value.vnet_key]
 
-  priority        = "Spot"
-  eviction_policy = "Delete"
-  spot_max_price  = -1 # 시장가 사용
+  priority = "Regular"
 
   # Taint: Istio Ingress Gateway 전용 (ARCHITECTURE.md §4.2)
   node_taints = [
     "dedicated=ingress:NoSchedule",
-    "kubernetes.azure.com/scalesetpriority=spot:NoSchedule",
   ]
   node_labels = {
-    "role"                                  = "ingress"
-    "kubernetes.azure.com/scalesetpriority" = "spot"
+    "role" = "ingress"
   }
 
-  # Spot pool은 upgrade_settings(maxSurge/maxUnavailable) 미지원
+  upgrade_settings {
+    max_surge                     = "1"
+    drain_timeout_in_minutes      = 30
+    node_soak_duration_in_minutes = 0
+  }
 
   tags = var.tags
 }
