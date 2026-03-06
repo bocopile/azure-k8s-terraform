@@ -71,6 +71,11 @@ variable "redis_capacity" {
   description = "Redis Premium Capacity (1=6GB / 2=13GB / 3=26GB)"
   type        = number
   default     = 1
+
+  validation {
+    condition     = contains([1, 2, 3], var.redis_capacity)
+    error_message = "redis_capacity must be 1, 2, or 3 (Premium SKU 제한)."
+  }
 }
 
 # ============================================================
@@ -92,18 +97,33 @@ variable "mysql_sku_name" {
   description = "MySQL SKU (B_Standard_B2ms=dev / GP_Standard_D4ds_v4=prod)"
   type        = string
   default     = "B_Standard_B2ms"
+
+  validation {
+    condition     = can(regex("^(B|GP|MO)_Standard_", var.mysql_sku_name))
+    error_message = "mysql_sku_name must start with B_Standard_, GP_Standard_, or MO_Standard_ (예: B_Standard_B2ms, GP_Standard_D4ds_v4)."
+  }
 }
 
 variable "mysql_version" {
-  description = "MySQL 버전"
+  description = "MySQL 버전 (8.0.21 / 8.0.40)"
   type        = string
   default     = "8.0.21"
+
+  validation {
+    condition     = can(regex("^8\\.0\\.", var.mysql_version))
+    error_message = "mysql_version must be 8.0.x (예: 8.0.21, 8.0.40)."
+  }
 }
 
 variable "mysql_storage_gb" {
-  description = "MySQL 스토리지 크기 (GB)"
+  description = "MySQL 스토리지 크기 (GB, 20–16384)"
   type        = number
   default     = 20
+
+  validation {
+    condition     = var.mysql_storage_gb >= 20 && var.mysql_storage_gb <= 16384
+    error_message = "mysql_storage_gb must be between 20 and 16384."
+  }
 }
 
 variable "mysql_databases" {
@@ -125,6 +145,11 @@ variable "servicebus_capacity" {
   description = "Service Bus Premium Capacity Units (1/2/4/8)"
   type        = number
   default     = 1
+
+  validation {
+    condition     = contains([1, 2, 4, 8], var.servicebus_capacity)
+    error_message = "servicebus_capacity must be 1, 2, 4, or 8 (Premium SKU 제한)."
+  }
 }
 
 variable "servicebus_queues" {
