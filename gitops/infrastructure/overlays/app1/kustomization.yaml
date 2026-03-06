@@ -1,0 +1,11 @@
+# ============================================================
+# app1 클러스터 overlay
+# base + app1 전용 리소스 (HPA, NetworkPolicy, ExternalSecret 등)
+# ============================================================
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../../base
+  # app1 전용 리소스 추가 시 여기에 선언
+  # - app-namespace-patch.yaml
+  # - external-secrets.yaml

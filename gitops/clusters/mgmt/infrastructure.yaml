@@ -1,0 +1,19 @@
+# ============================================================
+# Flux Kustomization — infrastructure/overlays/mgmt
+# FluxConfig의 root Kustomization이 이 디렉토리를 처음 적용.
+# 이 파일에 선언된 Kustomization 리소스가 순서대로 배포됨.
+# ============================================================
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: infrastructure-mgmt
+  namespace: flux-system
+spec:
+  interval: 5m
+  path: ./gitops/infrastructure/overlays/mgmt
+  prune: true
+  sourceRef:
+    kind: GitRepository
+    name: gitops-mgmt   # FluxConfig가 생성하는 GitRepository 이름과 일치
+  wait: true
+  timeout: 10m

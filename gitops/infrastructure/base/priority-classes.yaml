@@ -1,0 +1,29 @@
+# ============================================================
+# PriorityClass — 워크로드 우선순위 계층
+# platform-critical: 플랫폼 컴포넌트 (cert-manager, ESO 등)
+# workload-high:     비즈니스 중요 워크로드
+# workload-default:  일반 워크로드 (기본값)
+# ============================================================
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: platform-critical
+value: 1000000
+globalDefault: false
+description: "플랫폼 컴포넌트 전용 (cert-manager, ESO, Kyverno 등)"
+---
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: workload-high
+value: 100000
+globalDefault: false
+description: "비즈니스 중요 워크로드"
+---
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: workload-default
+value: 0
+globalDefault: true
+description: "일반 워크로드 기본값"
