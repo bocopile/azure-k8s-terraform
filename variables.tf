@@ -149,6 +149,12 @@ variable "acr_sku" {
   }
 }
 
+variable "acr_enable_private_endpoint" {
+  description = "ACR Private Endpoint 활성화 (Standard/Premium SKU 필요 — Basic은 미지원)"
+  type        = bool
+  default     = false
+}
+
 variable "bastion_sku" {
   description = "Azure Bastion SKU (Basic or Standard)"
   type        = string

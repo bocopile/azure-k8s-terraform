@@ -35,3 +35,51 @@ resource "azurerm_monitor_diagnostic_setting" "acr" {
     category = "AllMetrics"
   }
 }
+
+# ============================================================
+# ACR Private Endpoint (Standard/Premium SKU 전용)
+# Basic SKU는 Private Endpoint 미지원 → enable_private_endpoint = false 유지
+# DNS zone: privatelink.azurecr.io / subresource: registry
+# ============================================================
+
+resource "azurerm_private_dns_zone" "acr" {
+  count = var.enable_private_endpoint ? 1 : 0
+
+  name                = "privatelink.azurecr.io"
+  resource_group_name = var.rg_common
+  tags                = var.tags
+}
+
+resource "azurerm_private_dns_zone_virtual_network_link" "acr" {
+  for_each = var.enable_private_endpoint ? var.vnet_ids : {}
+
+  name                  = "dnslink-acr-${each.key}"
+  resource_group_name   = var.rg_common
+  private_dns_zone_name = azurerm_private_dns_zone.acr[0].name
+  virtual_network_id    = each.value
+  registration_enabled  = false
+  tags                  = var.tags
+}
+
+resource "azurerm_private_endpoint" "acr" {
+  count = var.enable_private_endpoint ? 1 : 0
+
+  name                = "pe-${var.name}"
+  location            = var.location
+  resource_group_name = var.rg_common
+  subnet_id           = var.pe_subnet_id
+
+  private_service_connection {
+    name                           = "psc-${var.name}"
+    private_connection_resource_id = azurerm_container_registry.acr.id
+    subresource_names              = ["registry"]
+    is_manual_connection           = false
+  }
+
+  private_dns_zone_group {
+    name                 = "dns-group-acr"
+    private_dns_zone_ids = [azurerm_private_dns_zone.acr[0].id]
+  }
+
+  tags = var.tags
+}

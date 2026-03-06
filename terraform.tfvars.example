@@ -41,6 +41,10 @@ jumpbox_ssh_public_key = "ssh-rsa AAAA... your-public-key-here"
 # bastion_sku           = "Basic"        # Basic | Standard
 # keyvault_sku          = "standard"     # standard | premium
 
+# --- ACR Private Endpoint (Standard/Premium SKU 필요, Basic은 미지원) ---
+# acr_sku                     = "Standard"   # PE 사용 시 Basic → Standard 변경 필수
+# acr_enable_private_endpoint = true         # 기본값: false
+
 # --- 보존기간 ---
 # log_retention_days        = 30
 # flow_log_retention_days   = 30
