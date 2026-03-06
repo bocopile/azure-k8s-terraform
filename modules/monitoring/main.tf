@@ -189,3 +189,27 @@ resource "azurerm_private_endpoint" "grafana" {
 
   tags = var.tags
 }
+
+# ============================================================
+# Grafana Admin 역할 — 배포 주체(Terraform runner)에게 부여
+# 미설정 시 "User does not have any required Grafana role" 오류 발생
+# grafana_admin_object_ids: 추가 어드민 계정 목록 (옵션)
+# ============================================================
+
+data "azurerm_client_config" "current_grafana" {}
+
+resource "azurerm_role_assignment" "grafana_admin_deployer" {
+  count = var.enable_grafana ? 1 : 0
+
+  scope                = azurerm_dashboard_grafana.grafana[0].id
+  role_definition_name = "Grafana Admin"
+  principal_id         = data.azurerm_client_config.current_grafana.object_id
+}
+
+resource "azurerm_role_assignment" "grafana_admin_extra" {
+  for_each = var.enable_grafana ? toset(var.grafana_admin_object_ids) : toset([])
+
+  scope                = azurerm_dashboard_grafana.grafana[0].id
+  role_definition_name = "Grafana Admin"
+  principal_id         = each.value
+}

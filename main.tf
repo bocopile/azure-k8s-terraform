@@ -145,11 +145,12 @@ module "monitoring" {
   enable_sentinel        = var.enable_sentinel
   enable_mcas            = var.enable_mcas
   log_retention_days     = var.log_retention_days
-  grafana_public_access  = var.grafana_public_access
-  grafana_sku            = var.grafana_sku
-  pe_subnet_id           = module.network.pe_subnet_id
-  vnet_ids               = module.network.vnet_ids
-  tags                   = var.tags
+  grafana_public_access    = var.grafana_public_access
+  grafana_sku              = var.grafana_sku
+  grafana_admin_object_ids = var.grafana_admin_object_ids
+  pe_subnet_id             = module.network.pe_subnet_id
+  vnet_ids                 = module.network.vnet_ids
+  tags                     = var.tags
 
   depends_on = [module.resource_group, module.network]
 }

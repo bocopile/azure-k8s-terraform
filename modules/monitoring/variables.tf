@@ -76,6 +76,12 @@ variable "vnet_ids" {
   default     = {}
 }
 
+variable "grafana_admin_object_ids" {
+  description = "Grafana Admin 역할을 부여할 추가 사용자/그룹 Object ID 목록 (배포 주체는 자동 부여)"
+  type        = list(string)
+  default     = []
+}
+
 variable "tags" {
   description = "Resource tags"
   type        = map(string)

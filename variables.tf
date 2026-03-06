@@ -239,6 +239,12 @@ variable "grafana_public_access" {
   default     = true
 }
 
+variable "grafana_admin_object_ids" {
+  description = "Grafana Admin 역할을 부여할 추가 사용자 Object ID 목록 (배포 주체는 자동 부여됨)"
+  type        = list(string)
+  default     = []
+}
+
 variable "grafana_sku" {
   description = "Azure Managed Grafana SKU (Standard or Essential)"
   type        = string
