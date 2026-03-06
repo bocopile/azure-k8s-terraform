@@ -9,10 +9,10 @@
 resource "azurerm_monitor_data_collection_endpoint" "prometheus" {
   for_each = var.clusters
 
-  name                          = "MSProm-DCE-${var.location}-${each.key}"
-  location                      = var.location
-  resource_group_name           = var.rg_cluster[each.key]
-  kind                          = "Linux"
+  name                = "MSProm-DCE-${var.location}-${each.key}"
+  location            = var.location
+  resource_group_name = var.rg_cluster[each.key]
+  kind                = "Linux"
   # true: Managed Prometheus Agent가 DCE HTTP 엔드포인트로 메트릭 push 가능
   # false로 두면 Private Endpoint 없이는 수집 불가 (기본 비활성화 상태에서 수집 안 됨)
   public_network_access_enabled = true

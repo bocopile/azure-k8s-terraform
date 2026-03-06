@@ -55,8 +55,8 @@ resource "azurerm_key_vault_secret" "mysql_password" {
 resource "azurerm_key_vault_secret" "mysql_connection_string" {
   count = var.enable_mysql ? 1 : 0
 
-  name  = "mysql-connection-string"
-  value = "Server=${azurerm_mysql_flexible_server.mysql[0].fqdn};Port=3306;User Id=${var.mysql_admin_username};Password=${random_password.mysql[0].result};SslMode=Required;"
+  name         = "mysql-connection-string"
+  value        = "Server=${azurerm_mysql_flexible_server.mysql[0].fqdn};Port=3306;User Id=${var.mysql_admin_username};Password=${random_password.mysql[0].result};SslMode=Required;"
   key_vault_id = var.key_vault_id
 
   tags = var.tags

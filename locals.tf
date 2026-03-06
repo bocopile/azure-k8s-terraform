@@ -96,8 +96,8 @@ locals {
     backup_storage    = "st${replace(local.prefix, "-", "")}${lower(var.kv_suffix)}bk" # AKS Backup Extension 스테이징 스토리지
     # jumpbox는 Public IP 없음 — Bastion 경유 전용 (ARCHITECTURE.md §5.7, ADR-021)
     # Data Services (P5) — kv_suffix 재활용으로 전역 고유성 확보
-    redis       = "cache-${local.prefix}-${var.kv_suffix}"
-    mysql       = "mysql-${local.prefix}-${var.kv_suffix}"
-    servicebus  = "sb-${local.prefix}-${var.kv_suffix}"
+    redis      = "cache-${local.prefix}-${var.kv_suffix}"
+    mysql      = "mysql-${local.prefix}-${var.kv_suffix}"
+    servicebus = "sb-${local.prefix}-${var.kv_suffix}"
   }
 }

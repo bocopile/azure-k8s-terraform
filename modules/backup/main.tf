@@ -109,11 +109,11 @@ resource "azurerm_kubernetes_cluster_extension" "backup" {
   # auto_upgrade_minor_version_enabled: azurerm ~4.14 미지원 — 기본 동작(자동 업그레이드) 사용
 
   configuration_settings = {
-    "configuration.backupStorageLocation.bucket"                        = azurerm_storage_container.backup[each.key].name
-    "configuration.backupStorageLocation.config.storageAccount"         = azurerm_storage_account.backup.name
-    "configuration.backupStorageLocation.config.resourceGroup"          = azurerm_storage_account.backup.resource_group_name
-    "configuration.backupStorageLocation.config.subscriptionId"         = var.subscription_id
-    "credentials.tenantId"                                              = var.tenant_id
+    "configuration.backupStorageLocation.bucket"                = azurerm_storage_container.backup[each.key].name
+    "configuration.backupStorageLocation.config.storageAccount" = azurerm_storage_account.backup.name
+    "configuration.backupStorageLocation.config.resourceGroup"  = azurerm_storage_account.backup.resource_group_name
+    "configuration.backupStorageLocation.config.subscriptionId" = var.subscription_id
+    "credentials.tenantId"                                      = var.tenant_id
   }
 
   depends_on = [

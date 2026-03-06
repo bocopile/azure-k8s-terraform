@@ -41,6 +41,6 @@ terraform {
     storage_account_name = "stk8stfstate2cfd"
     container_name       = "tfstate"
     key                  = "azure-k8s/main.tfstate"
-    use_azuread_auth     = true  # MSI/OIDC 인증 — Access Key 불필요
+    use_azuread_auth     = true # MSI/OIDC 인증 — Access Key 불필요
   }
 }
