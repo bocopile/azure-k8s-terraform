@@ -20,6 +20,17 @@ NAMESPACE="external-secrets"
 az aks get-credentials --resource-group "rg-${PREFIX:-k8s}-${CLUSTER}" \
   --name "aks-${CLUSTER}" --overwrite-existing --only-show-errors
 
+# ---- ESO Workload Identity Client ID 자동 조회 ----
+# ESO_MI_CLIENT_ID가 환경변수로 주입되지 않은 경우 Azure CLI로 자동 조회
+if [[ -z "${ESO_MI_CLIENT_ID:-}" ]]; then
+  ESO_MI_CLIENT_ID=$(az identity show \
+    --name "mi-eso-${CLUSTER}" \
+    --resource-group "rg-${PREFIX:-k8s}-common" \
+    --query clientId -o tsv 2>/dev/null || echo "")
+  [[ -n "${ESO_MI_CLIENT_ID}" ]] && \
+    echo "[eso] ESO_MI_CLIENT_ID 자동 조회: ${ESO_MI_CLIENT_ID}"
+fi
+
 helm repo add external-secrets https://charts.external-secrets.io --force-update
 helm upgrade --install external-secrets external-secrets/external-secrets \
   --namespace "${NAMESPACE}" \
@@ -46,6 +57,8 @@ helm upgrade --install external-secrets external-secrets/external-secrets \
   --set certController.resources.requests.memory=64Mi \
   --set certController.resources.limits.cpu=100m \
   --set certController.resources.limits.memory=128Mi \
+  ${ESO_MI_CLIENT_ID:+--set "serviceAccount.annotations.azure\.workload\.identity/client-id=${ESO_MI_CLIENT_ID}"} \
+  ${ESO_MI_CLIENT_ID:+--set "podLabels.azure\.workload\.identity/use=true"} \
   --wait --timeout 10m
 
 # HPA — ESO controller

@@ -131,3 +131,28 @@ resource "azurerm_role_assignment" "cert_manager_kv" {
 
   skip_service_principal_aad_check = true
 }
+
+# ============================================================
+# External Secrets Operator (ESO) Workload Identity
+# 클러스터당 1개 — Key Vault 시크릿 동기화 전용 (최소 권한: Secrets User)
+# ============================================================
+
+resource "azurerm_user_assigned_identity" "eso" {
+  for_each = var.clusters
+
+  name                = "mi-eso-${each.key}"
+  location            = var.location
+  resource_group_name = var.rg_common
+  tags                = var.tags
+}
+
+# ESO MI → Key Vault Secrets User (읽기 전용 — cert-manager와 분리)
+resource "azurerm_role_assignment" "eso_kv" {
+  for_each = var.clusters
+
+  principal_id         = azurerm_user_assigned_identity.eso[each.key].principal_id
+  role_definition_name = "Key Vault Secrets User"
+  scope                = var.key_vault_id
+
+  skip_service_principal_aad_check = true
+}

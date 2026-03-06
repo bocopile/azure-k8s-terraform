@@ -26,3 +26,19 @@ resource "azurerm_federated_identity_credential" "cert_manager" {
 
   depends_on = [module.identity, module.aks]
 }
+
+# ESO Federated Credential — 클러스터당 1개
+# Namespace: external-secrets, SA name: external-secrets
+resource "azurerm_federated_identity_credential" "eso" {
+  for_each = local.clusters
+
+  name      = "fedcred-eso-${each.key}"
+  parent_id = module.identity.eso_identity_ids[each.key]
+
+  issuer  = module.aks.oidc_issuer_urls[each.key]
+  subject = "system:serviceaccount:external-secrets:external-secrets"
+
+  audience = ["api://AzureADTokenExchange"]
+
+  depends_on = [module.identity, module.aks]
+}

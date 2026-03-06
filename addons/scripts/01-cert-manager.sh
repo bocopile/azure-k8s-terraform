@@ -20,6 +20,17 @@ NAMESPACE="cert-manager"
 az aks get-credentials --resource-group "rg-${PREFIX:-k8s}-${CLUSTER}" \
   --name "aks-${CLUSTER}" --overwrite-existing --only-show-errors
 
+# ---- cert-manager Workload Identity Client ID 자동 조회 ----
+# CERT_MANAGER_CLIENT_ID가 환경변수로 주입되지 않은 경우 Azure CLI로 자동 조회
+if [[ -z "${CERT_MANAGER_CLIENT_ID:-}" ]]; then
+  CERT_MANAGER_CLIENT_ID=$(az identity show \
+    --name "mi-cert-manager-${CLUSTER}" \
+    --resource-group "rg-${PREFIX:-k8s}-common" \
+    --query clientId -o tsv 2>/dev/null || echo "")
+  [[ -n "${CERT_MANAGER_CLIENT_ID}" ]] && \
+    echo "[cert-manager] CERT_MANAGER_CLIENT_ID 자동 조회: ${CERT_MANAGER_CLIENT_ID}"
+fi
+
 helm repo add jetstack https://charts.jetstack.io --force-update
 helm upgrade --install cert-manager jetstack/cert-manager \
   --namespace "${NAMESPACE}" \
@@ -48,7 +59,20 @@ helm upgrade --install cert-manager jetstack/cert-manager \
   --set cainjector.resources.requests.memory=64Mi \
   --set cainjector.resources.limits.cpu=100m \
   --set cainjector.resources.limits.memory=128Mi \
+  ${CERT_MANAGER_CLIENT_ID:+--set "serviceAccount.annotations.azure\.workload\.identity/client-id=${CERT_MANAGER_CLIENT_ID}"} \
+  ${CERT_MANAGER_CLIENT_ID:+--set "podLabels.azure\.workload\.identity/use=true"} \
   --wait --timeout 10m
+
+# Workload Identity 구성 확인
+if [[ -n "${CERT_MANAGER_CLIENT_ID:-}" ]]; then
+  echo "[cert-manager] Workload Identity 구성됨 — Client ID: ${CERT_MANAGER_CLIENT_ID}"
+  echo "[cert-manager] SA 어노테이션 확인:"
+  kubectl get sa cert-manager -n "${NAMESPACE}" \
+    -o jsonpath='{.metadata.annotations}' 2>/dev/null | grep -o 'azure\.workload\.identity[^,]*' || true
+else
+  echo "[cert-manager] CERT_MANAGER_CLIENT_ID 미설정 — Workload Identity 미구성"
+  echo "[cert-manager] DNS-01 챌린지 사용 시 addon_env에 CERT_MANAGER_CLIENT_ID를 추가하세요."
+fi
 
 # HPA — cert-manager controller
 cat <<'EOF' | kubectl apply -f -

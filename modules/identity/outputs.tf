@@ -27,3 +27,13 @@ output "cert_manager_client_ids" {
   description = "cert-manager managed identity client IDs by cluster key"
   value       = { for k, v in azurerm_user_assigned_identity.cert_manager : k => v.client_id }
 }
+
+output "eso_client_ids" {
+  description = "ESO managed identity client IDs by cluster key"
+  value       = { for k, v in azurerm_user_assigned_identity.eso : k => v.client_id }
+}
+
+output "eso_identity_ids" {
+  description = "ESO managed identity resource IDs by cluster key"
+  value       = { for k, v in azurerm_user_assigned_identity.eso : k => v.id }
+}
