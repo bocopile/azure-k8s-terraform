@@ -16,10 +16,11 @@
 # ============================================================
 
 resource "azurerm_network_watcher" "nw" {
-  name                = "nw-${local.location}"
+  name                = "nw-${local.prefix}"
   location            = local.location
   resource_group_name = module.resource_group.common_resource_group_name
   tags                = var.tags
+
 }
 
 resource "azurerm_storage_account" "flow_logs" {

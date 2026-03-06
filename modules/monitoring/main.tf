@@ -64,8 +64,10 @@ resource "azurerm_sentinel_data_connector_azure_active_directory" "aad" {
 }
 
 # Sentinel Data Connector — Microsoft Cloud App Security (MCAS)
+# 주의: Microsoft 365 E5 / EMS E5 라이선스가 없으면 apply 오류 발생
+# enable_mcas = true + Microsoft 365 E5 / EMS E5 라이선스 보유 시에만 활성화
 resource "azurerm_sentinel_data_connector_microsoft_cloud_app_security" "mcas" {
-  count = var.enable_sentinel ? 1 : 0
+  count = (var.enable_sentinel && var.enable_mcas) ? 1 : 0
 
   name                       = "dc-mcas"
   log_analytics_workspace_id = azurerm_sentinel_log_analytics_workspace_onboarding.sentinel[0].workspace_id

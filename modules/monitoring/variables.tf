@@ -29,6 +29,12 @@ variable "enable_sentinel" {
   default     = false
 }
 
+variable "enable_mcas" {
+  description = "Enable Sentinel MCAS Data Connector (Microsoft 365 E5 / EMS E5 라이선스 필요)"
+  type        = bool
+  default     = false
+}
+
 variable "enable_grafana" {
   description = "Enable Azure Managed Grafana for Prometheus visualization"
   type        = bool
