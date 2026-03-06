@@ -72,3 +72,68 @@ spec:
 EOF
 
 echo "[eso] ✓ Installed v${ESO_VERSION} on ${CLUSTER} (HA + HPA)"
+
+# ---- Azure Key Vault SecretStore (Workload Identity) ----
+# 필수 환경변수:
+#   KEY_VAULT_URL      : https://<vault-name>.vault.azure.net
+#   ESO_MI_CLIENT_ID   : SecretStore용 Workload Identity Client ID
+#                        (cert-manager MI와 분리 권장, 최소 권한: Key Vault Secrets User)
+
+if [[ -z "${KEY_VAULT_URL:-}" || -z "${ESO_MI_CLIENT_ID:-}" ]]; then
+  echo "[eso] KEY_VAULT_URL / ESO_MI_CLIENT_ID 미설정 — SecretStore 생성 건너뜀"
+  echo "[eso] SecretStore를 구성하려면 addon_env에 위 변수를 추가하세요."
+  exit 0
+fi
+
+: "${AZURE_TENANT_ID:?AZURE_TENANT_ID 환경변수를 설정하세요}"
+
+echo "[eso] Creating Azure Key Vault ClusterSecretStore on ${CLUSTER}"
+
+# ESO webhook이 준비될 때까지 대기
+kubectl -n "${NAMESPACE}" wait --for=condition=Available deployment/external-secrets-webhook --timeout=120s
+
+# ClusterSecretStore — Azure Key Vault + Workload Identity
+cat <<EOF | kubectl apply -f -
+apiVersion: external-secrets.io/v1beta1
+kind: ClusterSecretStore
+metadata:
+  name: azure-keyvault
+spec:
+  provider:
+    azurekv:
+      authType: WorkloadIdentity
+      vaultUrl: "${KEY_VAULT_URL}"
+      serviceAccountRef:
+        name: external-secrets
+        namespace: "${NAMESPACE}"
+EOF
+
+# ServiceAccount에 Workload Identity 어노테이션 추가
+kubectl annotate serviceaccount external-secrets \
+  -n "${NAMESPACE}" \
+  azure.workload.identity/client-id="${ESO_MI_CLIENT_ID}" \
+  --overwrite
+
+# ExternalSecret 예시 (참고용 — 실제 시크릿 이름에 맞게 수정)
+cat <<'EOF' | kubectl apply -f -
+apiVersion: external-secrets.io/v1beta1
+kind: ExternalSecret
+metadata:
+  name: example-secret
+  namespace: default
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    name: azure-keyvault
+    kind: ClusterSecretStore
+  target:
+    name: example-secret
+    creationPolicy: Owner
+  data:
+    - secretKey: my-key
+      remoteRef:
+        key: my-kv-secret-name   # Key Vault 시크릿 이름
+EOF
+
+echo "[eso] ✓ ClusterSecretStore 'azure-keyvault' created on ${CLUSTER}"
+echo "[eso] ExternalSecret 예시가 default 네임스페이스에 생성되었습니다 (수정 후 사용)"
