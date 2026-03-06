@@ -29,10 +29,8 @@ provider "azurerm" {
 
   features {
     key_vault {
-      # false: destroy 후 soft-deleted 상태 유지 (안전, 수동 purge 필요)
-      # true:  destroy 시 즉시 purge (편의성↑, 데이터 손실 위험↑)
-      # 상세 절차: DESTROY.md §4 참조
-      purge_soft_delete_on_destroy    = false
+      # true: destroy 시 즉시 purge — soft-delete 잔여 방지
+      purge_soft_delete_on_destroy    = true
       recover_soft_deleted_key_vaults = true
     }
     resource_group {
@@ -101,14 +99,15 @@ module "keyvault" {
 module "acr" {
   source = "./modules/acr"
 
-  location  = local.location
-  rg_common = local.rg_common
-  name      = local.names.acr
-  sku       = var.acr_sku
-  tags      = var.tags
+  location                   = local.location
+  rg_common                  = local.rg_common
+  name                       = local.names.acr
+  sku                        = var.acr_sku
+  log_analytics_workspace_id = module.monitoring.log_analytics_workspace_id
+  enable_diagnostics         = true
+  tags                       = var.tags
 
-  # 의존성: resource_group만 필요 (ACR은 network와 독립)
-  depends_on = [module.resource_group]
+  depends_on = [module.resource_group, module.monitoring]
 }
 
 # identity는 acr + keyvault 이후 생성 (단방향)
@@ -140,6 +139,7 @@ module "monitoring" {
   grafana_name           = local.names.grafana
   enable_grafana         = var.enable_grafana
   enable_sentinel        = var.enable_sentinel
+  enable_mcas            = var.enable_mcas
   log_retention_days     = var.log_retention_days
   grafana_public_access  = var.grafana_public_access
   grafana_sku            = var.grafana_sku
@@ -157,9 +157,43 @@ module "backup" {
   policy_name               = local.names.backup_policy
   enable_soft_delete        = var.backup_soft_delete
   backup_retention_duration = var.backup_retention_duration
-  tags                      = var.tags
 
-  depends_on = [module.resource_group]
+  # Backup Extension + BackupInstance 연결에 필요한 AKS 정보
+  backup_storage_account_name = local.names.backup_storage
+  subscription_id             = var.subscription_id
+  tenant_id                   = var.tenant_id
+  cluster_ids                 = module.aks.cluster_ids
+  cluster_rg_names            = local.rg_cluster
+  cluster_rg_ids              = module.resource_group.cluster_resource_group_ids
+  kubelet_object_ids          = module.identity.kubelet_object_ids
+
+  tags = var.tags
+
+  depends_on = [module.resource_group, module.aks, module.identity]
+}
+
+# ============================================================
+# Flux SSH Deploy Key → Key Vault Secret
+# jumpbox MSI가 az keyvault secret show로 조회 후 파일에 기록
+# ============================================================
+
+resource "azurerm_key_vault_secret" "flux_ssh_key" {
+  count = var.flux_ssh_private_key != "" ? 1 : 0
+
+  name         = "flux-ssh-private-key"
+  value        = var.flux_ssh_private_key
+  key_vault_id = module.keyvault.key_vault_id
+
+  depends_on = [module.keyvault]
+}
+
+# jumpbox MSI → Key Vault: 시크릿 조회 권한 (flux-ssh-private-key 등)
+resource "azurerm_role_assignment" "jumpbox_kv_secrets_user" {
+  scope                = module.keyvault.key_vault_id
+  role_definition_name = "Key Vault Secrets User"
+  principal_id         = module.aks.jumpbox_identity_principal_id
+
+  depends_on = [module.keyvault, module.aks]
 }
 
 module "aks" {
@@ -198,8 +232,51 @@ module "aks" {
   bastion_pip_name       = local.names.bastion_pip
   aks_sku_tier           = var.aks_sku_tier
   bastion_sku            = var.bastion_sku
+  subscription_id        = var.subscription_id
+  addon_repo_url         = var.addon_repo_url
+  addon_env              = var.addon_env
+  key_vault_name         = module.keyvault.key_vault_name
 
   tags = var.tags
 
-  depends_on = [module.resource_group, module.network, module.identity, module.monitoring]
+  depends_on = [module.resource_group, module.network, module.identity, module.monitoring, module.keyvault]
+}
+
+module "data_services" {
+  source = "./modules/data-services"
+
+  location     = local.location
+  rg_common    = local.rg_common
+  pe_subnet_id = module.network.pe_subnet_id
+  vnet_ids     = module.network.vnet_ids
+  key_vault_id = module.keyvault.key_vault_id
+
+  log_analytics_workspace_id = module.monitoring.log_analytics_workspace_id
+
+  # Enable flags — 기본 false, terraform.tfvars에서 선택적 활성화
+  enable_redis      = var.enable_redis
+  enable_mysql      = var.enable_mysql
+  enable_servicebus = var.enable_servicebus
+
+  # Naming
+  redis_name      = local.names.redis
+  mysql_name      = local.names.mysql
+  servicebus_name = local.names.servicebus
+
+  # Redis
+  redis_capacity = var.redis_capacity
+
+  # MySQL
+  mysql_admin_username = var.mysql_admin_username
+  mysql_sku_name       = var.mysql_sku_name
+  mysql_databases      = var.mysql_databases
+
+  # Service Bus
+  servicebus_capacity = var.servicebus_capacity
+  servicebus_queues   = var.servicebus_queues
+  servicebus_topics   = var.servicebus_topics
+
+  tags = var.tags
+
+  depends_on = [module.resource_group, module.network, module.keyvault, module.monitoring]
 }

@@ -63,6 +63,12 @@ variable "enable_sentinel" {
   default     = false
 }
 
+variable "enable_mcas" {
+  description = "Enable Sentinel MCAS Data Connector (Microsoft 365 E5 / EMS E5 라이선스 필요, enable_sentinel = true 전제)"
+  type        = bool
+  default     = false
+}
+
 variable "tags" {
   description = "Common resource tags applied to all resources"
   type        = map(string)
@@ -204,13 +210,13 @@ variable "backup_retention_duration" {
 variable "keyvault_purge_protection" {
   description = "Enable Key Vault purge protection (demo 환경에서는 false로 override)"
   type        = bool
-  default     = true
+  default     = false
 }
 
 variable "grafana_public_access" {
-  description = "Enable public network access for Azure Managed Grafana (프라이빗 환경에서는 false 권장)"
+  description = "Enable public network access for Azure Managed Grafana. Demo: true / Prod: false (PE 추가 필요)"
   type        = bool
-  default     = false
+  default     = true
 }
 
 variable "grafana_sku" {
@@ -228,4 +234,114 @@ variable "backup_soft_delete" {
   description = "Enable soft delete on Backup Vault. false = 즉시 삭제 (demo/dev), true = 보존 (prod)"
   type        = bool
   default     = false
+}
+
+variable "addon_repo_url" {
+  description = "Addon 설치 스크립트가 포함된 git 레포 URL (빈 문자열이면 CustomScript Extension에서 addon 설치 건너뜀)"
+  type        = string
+  default     = ""
+}
+
+# ============================================================
+# Addon 환경변수 — install.sh에 주입 (tofu apply 한 번으로 전체 배포)
+# ============================================================
+
+variable "addon_env" {
+  description = <<-EOT
+    install.sh 실행 전 export할 환경변수 맵.
+    예시 (terraform.tfvars):
+      addon_env = {
+        LETSENCRYPT_EMAIL       = "admin@example.com"
+        GITOPS_REPO_URL         = "ssh://git@github.com/org/repo.git"
+        GITOPS_BRANCH           = "main"
+        GITOPS_PATH             = "clusters"
+        AZURE_SUBSCRIPTION_ID   = "<subscription-id>"
+        AZURE_TENANT_ID         = "<tenant-id>"
+        DNS_ZONE_NAME           = "example.com"
+        DNS_ZONE_RG             = "rg-dns"
+        CERT_MANAGER_CLIENT_ID  = "<cert-manager-mi-client-id>"
+        PROMETHEUS_URL          = ""
+        GRAFANA_URL             = ""
+        GRAFANA_ENABLED         = "false"
+      }
+  EOT
+  type    = map(string)
+  default = {}
+}
+
+variable "flux_ssh_private_key" {
+  description = <<-EOT
+    Flux GitOps용 SSH Deploy Key (private key 전체 내용).
+    Key Vault에 'flux-ssh-private-key' 시크릿으로 저장됩니다.
+    jumpbox CustomScript Extension에서 MSI로 조회 후 파일로 기록.
+    생성: ssh-keygen -t ed25519 -C flux-deploy -f ~/.ssh/flux-deploy-key -N ''
+    공개키(flux-deploy-key.pub)를 GitHub/GitLab Deploy Key로 등록하세요.
+  EOT
+  type      = string
+  sensitive = true
+  default   = ""
+}
+
+# ============================================================
+# Data Services (P5)
+# ============================================================
+
+variable "enable_redis" {
+  description = "Azure Cache for Redis (Premium) 배포 여부"
+  type        = bool
+  default     = false
+}
+
+variable "enable_mysql" {
+  description = "Azure Database for MySQL Flexible Server 배포 여부"
+  type        = bool
+  default     = false
+}
+
+variable "enable_servicebus" {
+  description = "Azure Service Bus (Premium) 배포 여부 — RabbitMQ AMQP 호환"
+  type        = bool
+  default     = false
+}
+
+variable "redis_capacity" {
+  description = "Redis Premium Capacity (1=6GB / 2=13GB / 3=26GB)"
+  type        = number
+  default     = 1
+}
+
+variable "mysql_admin_username" {
+  description = "MySQL 관리자 계정명"
+  type        = string
+  default     = "mysqladmin"
+}
+
+variable "mysql_sku_name" {
+  description = "MySQL SKU (B_Standard_B2ms=dev / GP_Standard_D4ds_v4=prod)"
+  type        = string
+  default     = "B_Standard_B2ms"
+}
+
+variable "mysql_databases" {
+  description = "초기 생성할 MySQL 데이터베이스 이름 목록"
+  type        = list(string)
+  default     = []
+}
+
+variable "servicebus_capacity" {
+  description = "Service Bus Premium Capacity Units (1/2/4/8)"
+  type        = number
+  default     = 1
+}
+
+variable "servicebus_queues" {
+  description = "생성할 Service Bus Queue 이름 목록"
+  type        = list(string)
+  default     = []
+}
+
+variable "servicebus_topics" {
+  description = "생성할 Service Bus Topic 이름 목록"
+  type        = list(string)
+  default     = []
 }
