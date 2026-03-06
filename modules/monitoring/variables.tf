@@ -64,6 +64,18 @@ variable "grafana_sku" {
   default     = "Standard"
 }
 
+variable "pe_subnet_id" {
+  description = "Private Endpoint subnet ID (grafana_public_access = false 시 필수)"
+  type        = string
+  default     = ""
+}
+
+variable "vnet_ids" {
+  description = "VNet ID map — Grafana Private DNS Zone 링크 생성용 (grafana_public_access = false 시 필수)"
+  type        = map(string)
+  default     = {}
+}
+
 variable "tags" {
   description = "Resource tags"
   type        = map(string)

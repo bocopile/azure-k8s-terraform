@@ -105,9 +105,12 @@ module "acr" {
   sku                        = var.acr_sku
   log_analytics_workspace_id = module.monitoring.log_analytics_workspace_id
   enable_diagnostics         = true
+  enable_private_endpoint    = var.acr_enable_private_endpoint
+  pe_subnet_id               = module.network.pe_subnet_id
+  vnet_ids                   = module.network.vnet_ids
   tags                       = var.tags
 
-  depends_on = [module.resource_group, module.monitoring]
+  depends_on = [module.resource_group, module.network, module.monitoring]
 }
 
 # identity는 acr + keyvault 이후 생성 (단방향)
@@ -143,9 +146,11 @@ module "monitoring" {
   log_retention_days     = var.log_retention_days
   grafana_public_access  = var.grafana_public_access
   grafana_sku            = var.grafana_sku
+  pe_subnet_id           = module.network.pe_subnet_id
+  vnet_ids               = module.network.vnet_ids
   tags                   = var.tags
 
-  depends_on = [module.resource_group]
+  depends_on = [module.resource_group, module.network]
 }
 
 module "backup" {

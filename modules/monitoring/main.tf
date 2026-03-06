@@ -141,3 +141,51 @@ resource "azurerm_monitor_diagnostic_setting" "activity_log" {
   enabled_log { category = "Recommendation" }
   enabled_log { category = "ServiceHealth" }
 }
+
+# ============================================================
+# Grafana Private Endpoint
+# grafana_public_access = false 시 필수 — 없으면 접근 불가
+# DNS zone: privatelink.grafana.azure.com / subresource: grafana
+# ============================================================
+
+resource "azurerm_private_dns_zone" "grafana" {
+  count = (var.enable_grafana && !var.grafana_public_access) ? 1 : 0
+
+  name                = "privatelink.grafana.azure.com"
+  resource_group_name = var.rg_common
+  tags                = var.tags
+}
+
+resource "azurerm_private_dns_zone_virtual_network_link" "grafana" {
+  for_each = (var.enable_grafana && !var.grafana_public_access) ? var.vnet_ids : {}
+
+  name                  = "dnslink-grafana-${each.key}"
+  resource_group_name   = var.rg_common
+  private_dns_zone_name = azurerm_private_dns_zone.grafana[0].name
+  virtual_network_id    = each.value
+  registration_enabled  = false
+  tags                  = var.tags
+}
+
+resource "azurerm_private_endpoint" "grafana" {
+  count = (var.enable_grafana && !var.grafana_public_access) ? 1 : 0
+
+  name                = "pe-${var.grafana_name}"
+  location            = var.location
+  resource_group_name = var.rg_common
+  subnet_id           = var.pe_subnet_id
+
+  private_service_connection {
+    name                           = "psc-${var.grafana_name}"
+    private_connection_resource_id = azurerm_dashboard_grafana.grafana[0].id
+    subresource_names              = ["grafana"]
+    is_manual_connection           = false
+  }
+
+  private_dns_zone_group {
+    name                 = "dns-group-grafana"
+    private_dns_zone_ids = [azurerm_private_dns_zone.grafana[0].id]
+  }
+
+  tags = var.tags
+}
