@@ -144,6 +144,19 @@ variable "ingress_node_count" {
   }
 }
 
+variable "ingress_spot_enabled" {
+  description = <<-EOT
+    Ingress 노드풀 Spot 인스턴스 사용 여부.
+    true  — 비용 ~80% 절감, 단 노드 선점(Eviction) 시 일시적 인그레스 중단 가능 (데모 허용)
+    false — Regular 온디맨드 (운영 권장)
+    Spot 사용 시 lowPriorityCores 쿼터 확인 필요:
+      az quota show --scope /subscriptions/<SUB>/providers/Microsoft.Compute/locations/koreacentral \
+        --resource-name lowPriorityCores
+  EOT
+  type        = bool
+  default     = false
+}
+
 variable "vm_size_jumpbox" {
   description = "VM size for Jump VM"
   type        = string

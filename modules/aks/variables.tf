@@ -186,6 +186,12 @@ variable "ingress_node_count" {
   default     = 3
 }
 
+variable "ingress_spot_enabled" {
+  description = "Ingress 노드풀 Spot 인스턴스 사용 여부 (true = ~80% 비용 절감, lowPriorityCores 쿼터 필요)"
+  type        = bool
+  default     = false
+}
+
 variable "tags" {
   description = "Resource tags"
   type        = map(string)

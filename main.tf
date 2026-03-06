@@ -251,6 +251,7 @@ module "aks" {
   bastion_sku               = var.bastion_sku
   system_node_count         = var.system_node_count
   ingress_node_count        = var.ingress_node_count
+  ingress_spot_enabled      = var.ingress_spot_enabled
   subscription_id           = var.subscription_id
   addon_repo_url            = var.addon_repo_url
   addon_repo_branch         = var.addon_repo_branch

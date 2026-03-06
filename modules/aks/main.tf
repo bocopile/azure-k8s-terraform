@@ -155,10 +155,12 @@ resource "azurerm_kubernetes_cluster" "aks" {
 }
 
 # ============================================================
-# Ingress Node Pool (Regular/Dedicated, mgmt + app1 only)
-# 3 nodes, zone-redundant, tainted for Istio Ingress Gateway
-# NOTE: Spot → Regular 전환 (lowPriorityCores 쿼터 부족 대응)
-#       쿼터 증가 후 priority = "Spot" 으로 되돌릴 수 있음
+# Ingress Node Pool (mgmt + app1 only)
+# zone-redundant, tainted for Istio Ingress Gateway
+# ingress_spot_enabled = true 시 Spot 인스턴스 (~80% 비용 절감)
+# Spot 사용 시 lowPriorityCores 쿼터 필요:
+#   az quota show --scope /subscriptions/<SUB>/providers/Microsoft.Compute/locations/koreacentral \
+#     --resource-name lowPriorityCores
 # ============================================================
 
 resource "azurerm_kubernetes_cluster_node_pool" "ingress" {
@@ -171,8 +173,10 @@ resource "azurerm_kubernetes_cluster_node_pool" "ingress" {
   zones                 = var.zones
   vnet_subnet_id        = var.subnet_ids[each.value.vnet_key]
 
-  priority = "Regular"
-  os_sku   = "AzureLinux"
+  priority        = var.ingress_spot_enabled ? "Spot" : "Regular"
+  eviction_policy = var.ingress_spot_enabled ? "Delete" : null
+  spot_max_price  = var.ingress_spot_enabled ? -1 : null
+  os_sku          = "AzureLinux"
 
   # Taint: Istio Ingress Gateway 전용 (ARCHITECTURE.md §4.2)
   node_taints = [
