@@ -259,18 +259,6 @@ resource "azurerm_bastion_host" "bastion" {
 # 동일 apply에서 role assignment 생성 가능 (System-Assigned는 plan-time 참조 불가)
 # ============================================================
 
-# ============================================================
-# Marketplace 약관 동의 — RockyLinux (plan 블록 사용 시 필수)
-# 미동의 상태에서 VM 생성 시 MarketplacePurchaseEligibilityFailed 오류 발생
-# 이미 동의된 구독에서는 idempotent하게 동작 (오류 없음)
-# ============================================================
-
-resource "azurerm_marketplace_agreement" "rockylinux" {
-  publisher = "resf"
-  offer     = "rockylinux-x86_64"
-  plan      = "9-base"
-}
-
 resource "azurerm_user_assigned_identity" "jumpbox_mi" {
   name                = "mi-jumpbox"
   location            = var.location
@@ -317,41 +305,33 @@ resource "azurerm_linux_virtual_machine" "jumpbox" {
     disk_size_gb         = 30
   }
 
+  # Ubuntu 24.04 LTS (Canonical 기본 이미지 — Marketplace 약관 동의 불필요, plan 블록 없음)
   source_image_reference {
-    publisher = "resf"
-    offer     = "rockylinux-x86_64"
-    sku       = "9-base"
-    version   = "9.6.20250531" # pinned for reproducibility (update periodically)
+    publisher = "Canonical"
+    offer     = "ubuntu-24_04-lts"
+    sku       = "server"
+    version   = "latest"
   }
 
-  plan {
-    name      = "9-base"
-    publisher = "resf"
-    product   = "rockylinux-x86_64"
-  }
-
-  depends_on = [azurerm_marketplace_agreement.rockylinux]
-
-  # Jump VM 초기화: kubectl, az cli, helm, kubelogin, k9s, kubent, istioctl
+  # Jump VM 초기화: az cli, kubectl, kubelogin, helm, k9s, kubent, istioctl
   # NOTE: pinned versions for reproducibility. Update periodically.
   # <<-EOF 로 heredoc 작성 시 closing EOF의 들여쓰기 기준으로 앞 공백이 제거됨.
-  # closing EOF가 2칸이면 content 4칸 → 결과 2칸 → shebang에 공백 → Exec format error
-  # 해결: closing EOF를 4칸으로 맞춤 (content와 동일 들여쓰기)
+  # closing EOF를 content와 동일한 4칸으로 맞춤 → shebang이 position 0에 위치
   custom_data = base64encode(<<-EOF
     #!/bin/bash
     set -e
 
-    # Azure CLI (Microsoft signed RPM package)
-    rpm --import https://packages.microsoft.com/keys/microsoft.asc
-    cat > /etc/yum.repos.d/azure-cli.repo <<'REPO'
-[azure-cli]
-name=Azure CLI
-baseurl=https://packages.microsoft.com/yumrepos/azure-cli
-enabled=1
-gpgcheck=1
-gpgkey=https://packages.microsoft.com/keys/microsoft.asc
-REPO
-    dnf install -y azure-cli
+    # Azure CLI (Microsoft apt repository)
+    apt-get update -qq
+    apt-get install -y -qq apt-transport-https curl gnupg lsb-release ca-certificates
+    mkdir -p /etc/apt/keyrings
+    curl -sLS https://packages.microsoft.com/keys/microsoft.asc \
+      | gpg --dearmor -o /etc/apt/keyrings/microsoft.gpg
+    echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/microsoft.gpg] \
+      https://packages.microsoft.com/repos/azure-cli/ $(lsb_release -cs) main" \
+      > /etc/apt/sources.list.d/azure-cli.list
+    apt-get update -qq
+    apt-get install -y azure-cli
 
     # kubectl + kubelogin (via az cli — uses Microsoft CDN)
     az aks install-cli --install-location /usr/local/bin/kubectl \
