@@ -320,6 +320,9 @@ resource "azurerm_linux_virtual_machine" "jumpbox" {
 
   # Jump VM 초기화: kubectl, az cli, helm, kubelogin, k9s, kubent, istioctl
   # NOTE: pinned versions for reproducibility. Update periodically.
+  # <<-EOF 로 heredoc 작성 시 closing EOF의 들여쓰기 기준으로 앞 공백이 제거됨.
+  # closing EOF가 2칸이면 content 4칸 → 결과 2칸 → shebang에 공백 → Exec format error
+  # 해결: closing EOF를 4칸으로 맞춤 (content와 동일 들여쓰기)
   custom_data = base64encode(<<-EOF
     #!/bin/bash
     set -e
@@ -372,7 +375,7 @@ export KUBECONFIG=$HOME/.kube/config
 BASHRC
 
     echo "Jump VM init complete" > /tmp/jumpvm-init.done
-  EOF
+    EOF
   )
 
   tags = var.tags
