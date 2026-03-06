@@ -153,6 +153,11 @@ variable "acr_enable_private_endpoint" {
   description = "ACR Private Endpoint 활성화 (Standard/Premium SKU 필요 — Basic은 미지원)"
   type        = bool
   default     = false
+
+  validation {
+    condition     = !(var.acr_enable_private_endpoint && var.acr_sku == "Basic")
+    error_message = "acr_enable_private_endpoint = true 는 Basic SKU를 지원하지 않습니다. acr_sku를 Standard 또는 Premium으로 변경하세요."
+  }
 }
 
 variable "bastion_sku" {

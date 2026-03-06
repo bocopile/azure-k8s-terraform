@@ -259,6 +259,18 @@ resource "azurerm_bastion_host" "bastion" {
 # 동일 apply에서 role assignment 생성 가능 (System-Assigned는 plan-time 참조 불가)
 # ============================================================
 
+# ============================================================
+# Marketplace 약관 동의 — RockyLinux (plan 블록 사용 시 필수)
+# 미동의 상태에서 VM 생성 시 MarketplacePurchaseEligibilityFailed 오류 발생
+# 이미 동의된 구독에서는 idempotent하게 동작 (오류 없음)
+# ============================================================
+
+resource "azurerm_marketplace_agreement" "rockylinux" {
+  publisher = "resf"
+  offer     = "rockylinux-x86_64"
+  plan      = "9-base"
+}
+
 resource "azurerm_user_assigned_identity" "jumpbox_mi" {
   name                = "mi-jumpbox"
   location            = var.location
@@ -317,6 +329,8 @@ resource "azurerm_linux_virtual_machine" "jumpbox" {
     publisher = "resf"
     product   = "rockylinux-x86_64"
   }
+
+  depends_on = [azurerm_marketplace_agreement.rockylinux]
 
   # Jump VM 초기화: kubectl, az cli, helm, kubelogin, k9s, kubent, istioctl
   # NOTE: pinned versions for reproducibility. Update periodically.
