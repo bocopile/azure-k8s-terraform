@@ -304,6 +304,82 @@ jumpbox_ssh_public_key = "ssh-rsa AAAA..."
 > - `~/.ssh` 디렉토리가 없으면 `ssh-keygen`이 자동 생성합니다.
 > - 기존 `~/.ssh/id_rsa.pub`가 있다면 그대로 사용해도 됩니다.
 
+### 1-b. Flux SSH Deploy Key 준비
+
+Flux GitOps를 활성화하려면 SSH Deploy Key가 필요합니다.
+`addon_repo_url`을 설정하면 `tofu apply` 중에 자동으로 처리됩니다.
+
+```bash
+# 1. ed25519 키 쌍 생성 (비밀번호 없이)
+ssh-keygen -t ed25519 -C flux-deploy -f ~/.ssh/flux-deploy-key -N ''
+
+# 생성된 파일 확인
+ls -la ~/.ssh/flux-deploy-key*
+# ~/.ssh/flux-deploy-key      ← 비밀키 (terraform.tfvars에 등록)
+# ~/.ssh/flux-deploy-key.pub  ← 공개키 (GitHub/GitLab에 등록)
+
+# 2. 공개키 내용 확인 → GitHub Deploy Key로 등록
+cat ~/.ssh/flux-deploy-key.pub
+```
+
+> **GitHub 공개키 등록 위치**
+> GitOps 레포 → Settings → Deploy keys → Add deploy key
+> - Title: `flux-deploy`
+> - Key: 위 명령 출력값 전체 붙여넣기
+> - Allow write access: 체크 불필요 (read-only)
+
+```bash
+# 3. terraform.tfvars에 비밀키 등록
+# (file() 함수는 tofu apply 실행 시 로컬 파일을 읽어 Key Vault에 저장)
+cat >> terraform.tfvars <<'EOF'
+
+# Flux SSH Deploy Key (Key Vault에 안전하게 저장됨)
+flux_ssh_private_key = file("~/.ssh/flux-deploy-key")
+EOF
+```
+
+### 1-c. Addon 자동 설치 설정 (addon_env)
+
+`addon_repo_url`을 설정하면 `tofu apply` 완료 후 Jump VM이 자동으로 `install.sh`를 실행합니다.
+
+```bash
+# terraform.tfvars에 추가 (실제 값으로 교체)
+cat >> terraform.tfvars <<'EOF'
+
+# Git 레포 URL (이 프로젝트 또는 fork URL)
+addon_repo_url = "https://github.com/your-org/azure-k8s-terraform.git"
+
+# install.sh에 주입할 환경변수
+addon_env = {
+  # cert-manager ClusterIssuer (필수)
+  LETSENCRYPT_EMAIL     = "admin@example.com"
+  AZURE_SUBSCRIPTION_ID = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+  AZURE_TENANT_ID       = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+
+  # Flux GitOps (addon_repo_url 설정 시 필수)
+  GITOPS_REPO_URL = "ssh://git@github.com/your-org/gitops-repo.git"
+  GITOPS_BRANCH   = "main"
+  GITOPS_PATH     = "clusters"
+
+  # DNS-01 챌린지 (DNS Zone 있을 때만 — 없으면 HTTP-01 fallback)
+  DNS_ZONE_NAME          = ""
+  DNS_ZONE_RG            = ""
+  CERT_MANAGER_CLIENT_ID = ""
+
+  # Kiali (선택 — Azure Managed Prometheus 쿼리 URL)
+  PROMETHEUS_URL  = ""
+  GRAFANA_ENABLED = "false"
+}
+EOF
+```
+
+> **addon_env를 설정하지 않으면** `tofu apply`는 정상 동작하지만 install.sh에서
+> `LETSENCRYPT_EMAIL`이 없어 cert-manager ClusterIssuer 생성이 실패합니다.
+> Flux를 사용하지 않는다면 `flux_ssh_private_key`와 `GITOPS_REPO_URL`은 생략 가능합니다.
+
+> **addon_repo_url을 비워두면** CustomScript Extension이 실행되지 않고
+> Jump VM만 준비됩니다. 이후 수동으로 Bastion → Jump VM 접속 후 `install.sh`를 실행할 수 있습니다.
+
 ### 2. AKS 버전 확인
 
 ```bash
@@ -537,7 +613,28 @@ tofu apply -target=module.backup
 
 ## Phase 2 — 애드온 설치
 
-인프라 배포 완료 후 Jump VM에서 실행합니다.
+### 자동 설치 (권장)
+
+`terraform.tfvars`에 `addon_repo_url`을 설정하면 **`tofu apply` 한 번으로 전체 배포**가 완료됩니다.
+
+```
+tofu apply
+  ├── 인프라 생성 (AKS 3개, Key Vault, Backup 등)
+  ├── flux-ssh-private-key → Key Vault secret 저장
+  └── CustomScript Extension (Jump VM에서 백그라운드 실행)
+        ① addon_env 환경변수 export
+        ② Key Vault에서 Flux SSH key 조회
+        ③ addon_repo_url 레포 클론
+        └── install.sh --cluster all 자동 실행
+```
+
+설치 로그 확인 (Jump VM 접속 후):
+```bash
+# Azure Portal → vm-jumpbox → Bastion 접속 후
+tail -f /var/log/jumpvm-addon.log
+```
+
+### 수동 설치 (addon_repo_url 미설정 시)
 
 ```bash
 # Jump VM 접속 (Azure Bastion 경유)
@@ -553,34 +650,32 @@ cd ~/azure-k8s-terraform
 # 특정 클러스터만
 ./addons/install.sh --cluster mgmt
 
-# 커스텀 prefix + location 사용 (기본값: k8s / koreacentral)
-./addons/install.sh --cluster all --prefix my-project --location koreacentral
-
 # Dry-run (실제 설치 없이 확인)
 ./addons/install.sh --cluster all --dry-run
 ```
 
-### 설치 순서 (19개 스크립트, 14번은 최종 검증으로 마지막 실행)
+### 설치 순서 (20개 스크립트, 14번은 최종 검증으로 마지막 실행)
 
 | 단계 | 스크립트 | 내용 |
 |---|---|---|
 | 00 | `00-priority-classes.sh` | PriorityClass 정의 |
-| 00b | `00b-gateway-api.sh` | Gateway API CRDs (v1.3.0) |
-| 01 | `01-cert-manager.sh` | cert-manager + Workload Identity |
+| 00b | `00b-gateway-api.sh` | Gateway API CRDs (v1.5.0) |
+| 01 | `01-cert-manager.sh` | cert-manager + ClusterIssuer (Let's Encrypt) |
 | 02 | `02-external-secrets.sh` | External Secrets Operator |
 | 03 | `03-reloader.sh` | Stakater Reloader |
 | 04 | `04-istio.sh` | AKS Istio Add-on (asm-1-28) |
-| 05 | `05-kyverno.sh` | Kyverno 정책 엔진 v3.7.1 |
-| 06 | `06-flux.sh` | Flux v2 GitOps |
-| 07 | `07-kiali.sh` | Kiali 서비스 메시 대시보드 v2.21 |
-| 08 | `08-karpenter-nodepool.sh` | NAP NodePool CRD (cpu≤20, mem≤40Gi) |
-| 09 | `09-backup-extension.sh` | AKS Backup Extension (BackupInstance는 수동) |
+| 04b | `04b-istio-mtls.sh` | mTLS STRICT (PeerAuthentication + DestinationRule) |
+| 05 | `05-kyverno.sh` | Kyverno 정책 엔진 |
+| 06 | `06-flux.sh` | Flux v2 GitOps + FluxConfig |
+| 07 | `07-kiali.sh` | Kiali v2.22 + Kiali CR |
+| 08 | `08-karpenter-nodepool.sh` | NAP NodePool CRD (Spot 전용) |
+| 09 | `09-backup-extension.sh` | AKS Backup 상태 확인 (Extension은 Terraform 관리) |
 | 10 | `10-defender.sh` | Defender for Containers 검증 |
 | 11 | `11-budget-alert.sh` | 예산 알림 ($250/월) |
-| 12 | `12-aks-automation.sh` | AKS Stop/Start 자동화 (STUB — 미구현) |
+| 12 | `12-aks-automation.sh` | AKS Stop/Start 자동화 (STUB) |
 | 13 | `13-hubble.sh` | Cilium Hubble UI + Relay |
 | 15 | `15-tetragon.sh` | Cilium Tetragon (eBPF 런타임 보안) |
-| 16 | `16-otel-collector.sh` | OpenTelemetry Collector (분산 트레이싱) |
+| 16 | `16-otel-collector.sh` | OpenTelemetry Collector |
 | 19 | `19-vpa.sh` | Vertical Pod Autoscaler (recommend-only) |
 | 14 | `14-verify-clusters.sh` | 설치 검증 (항상 마지막) |
 
@@ -614,9 +709,12 @@ cd ~/azure-k8s-terraform
 | `flow_log_retention_days` | ❌ | `30` | NSG Flow Log 보존 기간 (일) |
 | `backup_retention_duration` | ❌ | `P7D` | Backup Vault 보존 기간 (ISO 8601) |
 | `keyvault_purge_protection` | ❌ | `true` | Key Vault Purge Protection 활성화 (demo: false) |
-| `grafana_public_access` | ❌ | `false` | Grafana Public 접근 허용 (demo: true) |
+| `grafana_public_access` | ❌ | `true` | Grafana Public 접근 허용 (prod: false + PE 필요) |
 | `grafana_sku` | ❌ | `Standard` | Grafana SKU (Standard / Essential) |
 | `backup_soft_delete` | ❌ | `false` | Backup Vault Soft Delete (prod: true 권장) |
+| `addon_repo_url` | ❌ | `""` | Addon 스크립트 git 레포 URL (설정 시 자동 설치) |
+| `addon_env` | ❌ | `{}` | install.sh 환경변수 맵 (`LETSENCRYPT_EMAIL` 등) |
+| `flux_ssh_private_key` | ❌ | `""` | Flux SSH 비밀키 (Key Vault에 저장, `file()` 사용) |
 
 ---
 
