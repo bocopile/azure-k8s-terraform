@@ -10,6 +10,7 @@
 #   02  external-secrets  — ESO PushSecret (전체)
 #   03  reloader          — Key Vault Auto-rotation 연동 (전체)
 #   04  istio             — AKS Istio asm-1-28 (mgmt, app1)
+#   04b istio-mtls        — PeerAuthentication STRICT + DestinationRule (mgmt, app1)
 #   05  kyverno           — 정책 엔진 (app1, app2 only)
 #   06  flux              — GitOps Flux v2 (전체)
 #   07  kiali             — 서비스 메시 관찰성 (mgmt only)
@@ -160,6 +161,14 @@ for cluster in mgmt app1; do
   if [[ "${CLUSTER_TARGET}" == "all" || "${CLUSTER_TARGET}" == "${cluster}" ]]; then
     log "--- [04] Enabling Istio asm-1-28 on ${cluster} ---"
     run "${SCRIPTS_DIR}/04-istio.sh" "${cluster}"
+  fi
+done
+
+# --- Step 04b: Istio mTLS STRICT (mgmt, app1 — 04-istio.sh 이후 실행) ---
+for cluster in mgmt app1; do
+  if [[ "${CLUSTER_TARGET}" == "all" || "${CLUSTER_TARGET}" == "${cluster}" ]]; then
+    log "--- [04b] Configuring Istio mTLS STRICT on ${cluster} ---"
+    run "${SCRIPTS_DIR}/04b-istio-mtls.sh" "${cluster}"
   fi
 done
 
