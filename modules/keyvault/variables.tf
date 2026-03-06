@@ -52,6 +52,17 @@ variable "purge_protection" {
   default     = false
 }
 
+variable "allowed_ips" {
+  description = <<-EOT
+    Key Vault network_acls ip_rules — Terraform 실행 IP를 허용해 private KV에 시크릿 쓰기 가능.
+    로컬 실행 시: curl -s ifconfig.me 로 확인한 공인 IP를 CIDR(/32) 형식으로 입력.
+    예: ["1.2.3.4/32"]
+    CI/CD 실행 시: 파이프라인 에이전트 IP 추가.
+  EOT
+  type        = list(string)
+  default     = []
+}
+
 variable "tags" {
   description = "Resource tags"
   type        = map(string)

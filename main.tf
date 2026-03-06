@@ -87,6 +87,7 @@ module "keyvault" {
   tenant_id                  = var.tenant_id
   sku_name                   = var.keyvault_sku
   purge_protection           = var.keyvault_purge_protection
+  allowed_ips                = var.kv_allowed_ips
   pe_subnet_id               = module.network.pe_subnet_id
   vnet_ids                   = module.network.vnet_ids
   log_analytics_workspace_id = module.monitoring.log_analytics_workspace_id

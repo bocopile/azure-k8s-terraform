@@ -219,6 +219,20 @@ variable "keyvault_purge_protection" {
   default     = false
 }
 
+variable "kv_allowed_ips" {
+  description = <<-EOT
+    Key Vault 접근 허용 IP 목록 (CIDR /32 형식).
+    Terraform을 로컬에서 실행할 때 data_services secrets 쓰기를 위해 반드시 설정.
+    설정 방법 (terraform.tfvars):
+      kv_allowed_ips = ["$(curl -s ifconfig.me)/32"]
+    또는:
+      kv_allowed_ips = ["1.2.3.4/32"]
+    CI/CD 실행 시 파이프라인 에이전트 공인 IP 추가.
+  EOT
+  type        = list(string)
+  default     = []
+}
+
 variable "grafana_public_access" {
   description = "Enable public network access for Azure Managed Grafana. Demo: true / Prod: false (PE 추가 필요)"
   type        = bool

@@ -410,8 +410,11 @@ resource "azurerm_virtual_machine_extension" "jumpbox_addon" {
       LOG=/var/log/jumpvm-addon.log
       exec > >(tee -a "$LOG") 2>&1
 
-      echo "[$(date '+%Y-%m-%dT%H:%M:%S')] addon-install: waiting for cloud-init..."
-      timeout 600 bash -c 'until [ -f /tmp/jumpvm-init.done ]; do sleep 15; done'
+      echo "[$(date '+%Y-%m-%dT%H:%M:%S')] addon-install: waiting for cloud-init (max 30min)..."
+      # cloud-init은 az cli, helm, kubectl 등 패키지 다운로드로 15~20분 소요
+      timeout 1800 bash -c 'until [ -f /tmp/jumpvm-init.done ]; do sleep 15; done' || {
+        echo "[$(date '+%Y-%m-%dT%H:%M:%S')] [WARN] cloud-init 대기 시간 초과 — 계속 진행"
+      }
       echo "[$(date '+%Y-%m-%dT%H:%M:%S')] addon-install: cloud-init complete"
 
       # User-Assigned Managed Identity로 로그인

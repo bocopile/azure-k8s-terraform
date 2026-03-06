@@ -39,6 +39,9 @@ resource "azurerm_key_vault" "kv" {
   network_acls {
     default_action = "Deny"
     bypass         = "AzureServices" # Terraform apply 시 AzureServices 우회 허용
+    # Terraform 실행 IP 허용 — 로컬 실행 시 var.allowed_ips에 공인 IP(CIDR) 추가
+    # 예: allowed_ips = ["$(curl -s ifconfig.me)/32"]
+    ip_rules = var.allowed_ips
   }
 
   tags = var.tags
