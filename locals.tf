@@ -22,18 +22,22 @@ locals {
   }
 
   # --- Cluster definitions ---
+  # pod_cidr: Azure CNI Overlay — 클러스터간 비중복 Pod CIDR (ARCHITECTURE.md §3.2)
   clusters = {
     mgmt = {
       has_ingress_pool = true
       vnet_key         = "mgmt"
+      pod_cidr         = "10.244.0.0/16"
     }
     app1 = {
       has_ingress_pool = true
       vnet_key         = "app1"
+      pod_cidr         = "10.245.0.0/16"
     }
     app2 = {
       has_ingress_pool = false
       vnet_key         = "app2"
+      pod_cidr         = "10.246.0.0/16"
     }
   }
 

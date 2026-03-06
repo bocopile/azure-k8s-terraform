@@ -33,6 +33,7 @@ variable "clusters" {
   type = map(object({
     has_ingress_pool = bool
     vnet_key         = string
+    pod_cidr         = string
   }))
 }
 
@@ -41,6 +42,7 @@ variable "clusters_with_ingress" {
   type = map(object({
     has_ingress_pool = bool
     vnet_key         = string
+    pod_cidr         = string
   }))
 }
 

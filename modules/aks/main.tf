@@ -75,7 +75,7 @@ resource "azurerm_kubernetes_cluster" "aks" {
     network_plugin      = "azure"
     network_plugin_mode = "overlay"
     network_data_plane  = "cilium"
-    pod_cidr            = "10.${each.key == "mgmt" ? 244 : each.key == "app1" ? 245 : 246}.0.0/16"
+    pod_cidr            = each.value.pod_cidr
     load_balancer_sku   = "standard"
     outbound_type       = "loadBalancer" # ADR-016: LB SNAT → TODO: NAT Gateway 도입 검토 (SNAT 포트 고갈 방지)
   }
