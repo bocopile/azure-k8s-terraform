@@ -127,12 +127,14 @@ kubectl annotate serviceaccount external-secrets \
   azure.workload.identity/client-id="${ESO_MI_CLIENT_ID}" \
   --overwrite
 
-# ExternalSecret 예시 (참고용 — 실제 시크릿 이름에 맞게 수정)
-cat <<'EOF' | kubectl apply -f -
+echo "[eso] ✓ ClusterSecretStore 'azure-keyvault' created on ${CLUSTER}"
+echo "[eso] ExternalSecret 사용 예시 (직접 apply 필요):"
+cat <<'EOF'
+---
 apiVersion: external-secrets.io/v1beta1
 kind: ExternalSecret
 metadata:
-  name: example-secret
+  name: my-secret
   namespace: default
 spec:
   refreshInterval: 1h
@@ -140,13 +142,10 @@ spec:
     name: azure-keyvault
     kind: ClusterSecretStore
   target:
-    name: example-secret
+    name: my-secret
     creationPolicy: Owner
   data:
     - secretKey: my-key
       remoteRef:
         key: my-kv-secret-name   # Key Vault 시크릿 이름
 EOF
-
-echo "[eso] ✓ ClusterSecretStore 'azure-keyvault' created on ${CLUSTER}"
-echo "[eso] ExternalSecret 예시가 default 네임스페이스에 생성되었습니다 (수정 후 사용)"

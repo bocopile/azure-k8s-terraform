@@ -49,13 +49,17 @@ for CLUSTER in "${CLUSTERS[@]}"; do
   fi
 
   # --- 2. 시스템 Pod 상태 ---
+  # Terminating: 정상 종료 중 / Pending: 스케줄 대기 (일시적 허용)
   FAILING_PODS=$(kubectl get pods -A --no-headers 2>/dev/null \
-    | grep -vE "Running|Completed|Succeeded" | grep -v "^$" | wc -l || echo "99")
+    | grep -vE "Running|Completed|Succeeded|Terminating" | grep -v "^$" | wc -l || echo "99")
+  PENDING_PODS=$(kubectl get pods -A --no-headers 2>/dev/null \
+    | grep "Pending" | wc -l || echo "0")
   if [[ "${FAILING_PODS}" -eq 0 ]]; then
     ok "All pods Running/Completed"
+    [[ "${PENDING_PODS}" -gt 0 ]] && echo "  [WARN] ${PENDING_PODS} pod(s) Pending (스케줄 대기 중 — 일시적일 수 있음)"
   else
     fail "${FAILING_PODS} pod(s) not Running"
-    kubectl get pods -A --no-headers 2>/dev/null | grep -vE "Running|Completed|Succeeded" || true
+    kubectl get pods -A --no-headers 2>/dev/null | grep -vE "Running|Completed|Succeeded|Terminating" || true
   fi
 
   # --- 3. Key Vault CSI Driver ---

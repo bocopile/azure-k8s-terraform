@@ -75,10 +75,12 @@ spec:
   external_services:
     istio:
       root_namespace: istio-system
+$(if [[ -n "${PROMETHEUS_URL:-}" ]]; then
+cat <<PROMEOF
     prometheus:
-      # Azure Managed Prometheus 쿼리 URL (DCE public endpoint)
-      # 미설정 시 Kiali 메트릭 기능 비활성화 — Prometheus 연동 후 업데이트
-      url: "${PROMETHEUS_URL:-}"
+      url: "${PROMETHEUS_URL}"
+PROMEOF
+fi)
     grafana:
       enabled: ${GRAFANA_ENABLED:-false}
       url: "${GRAFANA_URL:-}"

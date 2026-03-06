@@ -8,10 +8,27 @@
 #
 # Usage: ./15-tetragon.sh <cluster-name>
 # ============================================================
-# WARNING: AKS with managed Cilium may conflict with standalone Tetragon.
-# Verify compatibility before deploying. Consider using AKS native Tetragon if available.
 set -euo pipefail
 CLUSTER="${1:?cluster name required}"
+
+# ── Managed Cilium 호환성 체크 ──────────────────────────────────
+# AKS Managed Cilium 환경에서 standalone Tetragon 설치 시 eBPF 프로그램 충돌 가능성
+RG="rg-${PREFIX:-k8s}-${CLUSTER}"
+NETWORK_PLUGIN=$(az aks show -g "${RG}" -n "aks-${CLUSTER}" \
+  --query 'networkProfile.networkDataplane' -o tsv 2>/dev/null || echo "")
+
+if [[ "${NETWORK_PLUGIN}" == "cilium" ]]; then
+  echo "[tetragon][WARN] AKS Managed Cilium(네트워크 데이터플레인) 감지됨."
+  echo "[tetragon][WARN] Standalone Tetragon은 eBPF 프로그램 충돌 가능성이 있습니다."
+  echo "[tetragon][WARN] AKS native Tetragon 지원 여부를 먼저 확인하세요:"
+  echo "[tetragon][WARN]   az aks show -g ${RG} -n aks-${CLUSTER} --query 'securityProfile'"
+  echo "[tetragon][WARN] 계속 설치하려면 TETRAGON_FORCE=true 환경변수를 설정하세요."
+  if [[ "${TETRAGON_FORCE:-false}" != "true" ]]; then
+    echo "[tetragon] 설치 중단. TETRAGON_FORCE=true 로 강제 설치 가능."
+    exit 0
+  fi
+  echo "[tetragon][WARN] TETRAGON_FORCE=true — 강제 설치 진행."
+fi
 
 echo "[tetragon] Installing Cilium Tetragon on: ${CLUSTER}"
 
