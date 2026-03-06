@@ -54,6 +54,16 @@ provider "azuread" {
 #   federation.tf (root): identity + aks outputs 참조 (별도 파일)
 # ============================================================
 
+# ============================================================
+# Azure Resource Provider 자동 등록
+# AKS Backup Extension은 Microsoft.KubernetesConfiguration 필수
+# tofu apply 한 번에 모든 인프라 배포 가능하도록 사전 등록
+# ============================================================
+
+resource "azurerm_resource_provider_registration" "kubernetes_config" {
+  name = "Microsoft.KubernetesConfiguration"
+}
+
 module "resource_group" {
   source = "./modules/resource-group"
 
@@ -176,7 +186,7 @@ module "backup" {
 
   tags = var.tags
 
-  depends_on = [module.resource_group, module.aks, module.identity]
+  depends_on = [module.resource_group, module.aks, module.identity, azurerm_resource_provider_registration.kubernetes_config]
 }
 
 # ============================================================

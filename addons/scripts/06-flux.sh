@@ -16,11 +16,15 @@
 set -euo pipefail
 CLUSTER="${1:?cluster name required}"
 
-: "${GITOPS_REPO_URL:?GITOPS_REPO_URL 환경변수를 설정하세요 (예: ssh://git@github.com/org/repo.git)}"
-
 GITOPS_BRANCH="${GITOPS_BRANCH:-main}"
 GITOPS_PATH="${GITOPS_PATH:-clusters/${CLUSTER}}"
 GITOPS_SSH_KEY_FILE="${GITOPS_SSH_KEY_FILE:-${HOME}/.ssh/flux-deploy-key}"
+
+# GITOPS_REPO_URL 미설정 시 FluxConfig 건너뜀 (다음 버전 과제)
+if [[ -z "${GITOPS_REPO_URL:-}" ]]; then
+  echo "[flux] GITOPS_REPO_URL 미설정 — FluxConfig 건너뜀 (다음 버전 과제)"
+  exit 0
+fi
 
 echo "[flux] Enabling AKS GitOps (Flux v2) on: ${CLUSTER}"
 
