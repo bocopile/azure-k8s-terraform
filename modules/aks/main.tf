@@ -57,6 +57,8 @@ resource "azurerm_kubernetes_cluster" "aks" {
     # System critical addons only (C6)
     only_critical_addons_enabled = true
 
+    os_sku = "AzureLinux"
+
     upgrade_settings {
       max_surge = "33%"
     }
@@ -170,6 +172,7 @@ resource "azurerm_kubernetes_cluster_node_pool" "ingress" {
   vnet_subnet_id        = var.subnet_ids[each.value.vnet_key]
 
   priority = "Regular"
+  os_sku   = "AzureLinux"
 
   # Taint: Istio Ingress Gateway 전용 (ARCHITECTURE.md §4.2)
   node_taints = [
@@ -250,6 +253,19 @@ resource "azurerm_bastion_host" "bastion" {
 # Private IP only — Bastion 경유 전용
 # ============================================================
 
+# ============================================================
+# P2: Jump VM User-Assigned Managed Identity
+# System-Assigned 대신 UAMI 사용 — principal_id가 apply 전에 known되어
+# 동일 apply에서 role assignment 생성 가능 (System-Assigned는 plan-time 참조 불가)
+# ============================================================
+
+resource "azurerm_user_assigned_identity" "jumpbox_mi" {
+  name                = "mi-jumpbox"
+  location            = var.location
+  resource_group_name = lookup(var.rg_cluster, "mgmt", values(var.rg_cluster)[0])
+  tags                = var.tags
+}
+
 resource "azurerm_network_interface" "jumpbox" {
   name                = var.jumpbox_nic_name
   location            = var.location
@@ -272,6 +288,11 @@ resource "azurerm_linux_virtual_machine" "jumpbox" {
   admin_username      = var.jumpbox_admin_username
 
   network_interface_ids = [azurerm_network_interface.jumpbox.id]
+
+  identity {
+    type         = "UserAssigned"
+    identity_ids = [azurerm_user_assigned_identity.jumpbox_mi.id]
+  }
 
   admin_ssh_key {
     username   = var.jumpbox_admin_username
@@ -355,4 +376,104 @@ BASHRC
   )
 
   tags = var.tags
+}
+
+# ============================================================
+# P2: Jump VM System-Assigned MI → AKS RBAC Cluster Admin
+# 각 AKS 클러스터에서 kubectl 접근 권한 부여 (kubelogin MSI 모드)
+# ============================================================
+
+resource "azurerm_role_assignment" "jumpbox_aks_admin" {
+  for_each = azurerm_kubernetes_cluster.aks
+
+  scope                = each.value.id
+  role_definition_name = "Azure Kubernetes Service RBAC Cluster Admin"
+  principal_id         = azurerm_user_assigned_identity.jumpbox_mi.principal_id
+}
+
+# ============================================================
+# P2: CustomScript Extension — Addon 자동 설치
+# cloud-init 완료 후 MSI 인증 → AKS credentials → install.sh 실행
+# ============================================================
+
+resource "azurerm_virtual_machine_extension" "jumpbox_addon" {
+  name                 = "addon-install"
+  virtual_machine_id   = azurerm_linux_virtual_machine.jumpbox.id
+  publisher            = "Microsoft.Azure.Extensions"
+  type                 = "CustomScript"
+  type_handler_version = "2.1"
+
+  protected_settings = jsonencode({
+    script = base64encode(<<-SCRIPT
+      #!/bin/bash
+      set -euo pipefail
+      LOG=/var/log/jumpvm-addon.log
+      exec > >(tee -a "$LOG") 2>&1
+
+      echo "[$(date '+%Y-%m-%dT%H:%M:%S')] addon-install: waiting for cloud-init..."
+      timeout 600 bash -c 'until [ -f /tmp/jumpvm-init.done ]; do sleep 15; done'
+      echo "[$(date '+%Y-%m-%dT%H:%M:%S')] addon-install: cloud-init complete"
+
+      # User-Assigned Managed Identity로 로그인
+      az login --identity --allow-no-subscriptions
+      az account set --subscription ${var.subscription_id}
+
+      # ---- addon_env 환경변수 주입 (terraform.tfvars에서 선언) ----
+      %{for key, value in var.addon_env~}
+      export ${key}="${value}"
+      %{endfor~}
+
+      # ---- Flux SSH Deploy Key: Key Vault에서 조회 후 파일로 기록 ----
+      if [[ -n "${var.key_vault_name}" ]]; then
+        FLUX_KEY=$$(az keyvault secret show \
+          --vault-name "${var.key_vault_name}" \
+          --name flux-ssh-private-key \
+          --query value -o tsv 2>/dev/null || echo "")
+        if [[ -n "$$FLUX_KEY" ]]; then
+          mkdir -p /root/.ssh
+          printf '%s' "$$FLUX_KEY" > /root/.ssh/flux-deploy-key
+          chmod 600 /root/.ssh/flux-deploy-key
+          export GITOPS_SSH_KEY_FILE=/root/.ssh/flux-deploy-key
+          echo "[$(date '+%Y-%m-%dT%H:%M:%S')] Flux SSH key loaded from Key Vault"
+        fi
+      fi
+
+      # AKS credentials 취득 (MSI 접근)
+      export KUBECONFIG=/root/.kube/config
+      mkdir -p /root/.kube
+      %{for name, _ in var.clusters~}
+      az aks get-credentials \
+        --resource-group ${var.rg_cluster[name]} \
+        --name aks-${name} \
+        --overwrite-existing
+      %{endfor~}
+
+      # kubelogin MSI 모드로 변환 (Azure RBAC + local_account_disabled 대응)
+      kubelogin convert-kubeconfig -l msi
+
+      # Addon 레포 클론 후 설치 (addon_repo_url 설정 시에만 실행)
+      if [[ -n "${var.addon_repo_url}" ]]; then
+        REPO_DIR="/opt/addon-repo"
+        rm -rf "$$REPO_DIR"
+        git clone "${var.addon_repo_url}" "$$REPO_DIR"
+        cd "$$REPO_DIR"
+        chmod +x addons/install.sh
+        ./addons/install.sh \
+          --prefix ${var.prefix} \
+          --location ${var.location}
+      else
+        echo "[$(date '+%Y-%m-%dT%H:%M:%S')] addon_repo_url 미설정 — 설치 건너뜀"
+      fi
+
+      echo "[$(date '+%Y-%m-%dT%H:%M:%S')] addon-install: complete"
+    SCRIPT
+    )
+  })
+
+  tags = var.tags
+
+  depends_on = [
+    azurerm_kubernetes_cluster.aks,
+    azurerm_role_assignment.jumpbox_aks_admin,
+  ]
 }

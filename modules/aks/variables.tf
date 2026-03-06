@@ -134,7 +134,7 @@ variable "jumpbox_private_ip" {
       can(regex("^(\\d{1,3}\\.){3}\\d{1,3}$", var.jumpbox_private_ip)),
       alltrue([for octet in split(".", var.jumpbox_private_ip) : tonumber(octet) >= 0 && tonumber(octet) <= 255])
     ])
-    error_message = "jumpbox_private_ip must be a valid IPv4 address with octets 0-255 (e.g. 10.1.1.10)."
+    error_message = "jumpbox_private_ip must be a valid IPv4 address with octets 0-255 (e.g. 10.1.4.10)."
   }
 }
 
@@ -176,4 +176,27 @@ variable "tags" {
   description = "Resource tags"
   type        = map(string)
   default     = {}
+}
+
+variable "subscription_id" {
+  description = "Azure subscription ID (CustomScript Extension에서 az account set에 사용)"
+  type        = string
+}
+
+variable "addon_repo_url" {
+  description = "Addon 설치 스크립트가 포함된 git 레포 URL (빈 문자열이면 addon 설치 건너뜀)"
+  type        = string
+  default     = ""
+}
+
+variable "addon_env" {
+  description = "install.sh 실행 전 export할 환경변수 맵 (LETSENCRYPT_EMAIL, GITOPS_REPO_URL 등)"
+  type        = map(string)
+  default     = {}
+}
+
+variable "key_vault_name" {
+  description = "Key Vault 이름 — jumpbox MSI가 flux-ssh-private-key 등 시크릿 조회에 사용"
+  type        = string
+  default     = ""
 }

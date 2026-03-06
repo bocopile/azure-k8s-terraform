@@ -38,3 +38,8 @@ output "jumpbox_vm_name" {
   description = "Jump VM name"
   value       = azurerm_linux_virtual_machine.jumpbox.name
 }
+
+output "jumpbox_identity_principal_id" {
+  description = "Jump VM User-Assigned Managed Identity principal ID"
+  value       = azurerm_user_assigned_identity.jumpbox_mi.principal_id
+}
