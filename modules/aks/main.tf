@@ -481,6 +481,18 @@ resource "azurerm_virtual_machine_extension" "jumpbox_addon" {
 
   tags = var.tags
 
+  # script 내용이 변경돼도 재실행하지 않음 (cloud-init + addon 설치는 1회만 실행)
+  lifecycle {
+    ignore_changes = [protected_settings]
+  }
+
+  # provider timeout: CustomScript는 cloud-init(15~20분) + addon 설치 포함 최대 60분
+  timeouts {
+    create = "60m"
+    update = "60m"
+    delete = "15m"
+  }
+
   depends_on = [
     azurerm_kubernetes_cluster.aks,
     azurerm_role_assignment.jumpbox_aks_admin,
