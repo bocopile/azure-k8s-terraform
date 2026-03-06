@@ -237,10 +237,11 @@ module "aks" {
   bastion_pip_name       = local.names.bastion_pip
   aks_sku_tier           = var.aks_sku_tier
   bastion_sku            = var.bastion_sku
-  subscription_id        = var.subscription_id
-  addon_repo_url         = var.addon_repo_url
-  addon_env              = var.addon_env
-  key_vault_name         = module.keyvault.key_vault_name
+  subscription_id           = var.subscription_id
+  addon_repo_url            = var.addon_repo_url
+  addon_env                 = var.addon_env
+  key_vault_name            = module.keyvault.key_vault_name
+  prometheus_query_endpoint = module.monitoring.monitor_workspace_query_endpoint
 
   tags = var.tags
 

@@ -200,3 +200,9 @@ variable "key_vault_name" {
   type        = string
   default     = ""
 }
+
+variable "prometheus_query_endpoint" {
+  description = "Azure Monitor Workspace Prometheus 쿼리 엔드포인트 — addon_env.PROMETHEUS_URL 미설정 시 자동 주입"
+  type        = string
+  default     = ""
+}

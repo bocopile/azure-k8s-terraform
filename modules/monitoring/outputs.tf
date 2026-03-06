@@ -40,3 +40,8 @@ output "log_analytics_workspace_name" {
   description = "Log Analytics Workspace name"
   value       = azurerm_log_analytics_workspace.law.name
 }
+
+output "monitor_workspace_query_endpoint" {
+  description = "Azure Monitor Workspace Prometheus 쿼리 엔드포인트 URL (Kiali PROMETHEUS_URL)"
+  value       = azurerm_monitor_workspace.mon.query_endpoint
+}

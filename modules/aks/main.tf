@@ -418,7 +418,13 @@ resource "azurerm_virtual_machine_extension" "jumpbox_addon" {
       az login --identity --allow-no-subscriptions
       az account set --subscription ${var.subscription_id}
 
-      # ---- addon_env 환경변수 주입 (terraform.tfvars에서 선언) ----
+      # ---- Terraform 자동 주입 환경변수 ----
+      # addon_env에 명시적 값이 없을 때 Terraform output으로 fallback
+      %{if var.prometheus_query_endpoint != ""}
+      export PROMETHEUS_URL="${var.prometheus_query_endpoint}"
+      %{endif}
+
+      # ---- addon_env 환경변수 주입 (terraform.tfvars에서 선언, 위 값 override) ----
       %{for key, value in var.addon_env~}
       export ${key}="${value}"
       %{endfor~}
