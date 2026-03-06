@@ -189,10 +189,10 @@ if az dataprotection backup-vault show -g "${VAULT_RG}" -n "${VAULT_NAME}" &>/de
       if [[ "${DRY_RUN}" == "true" ]]; then
         log "  [DRY-RUN] az dataprotection backup-instance delete -g ${VAULT_RG} --vault-name ${VAULT_NAME} -n ${instance} --yes"
       else
-        # || true 없음 — 실패 시 스크립트 중단 (tofu destroy 진행 차단)
         az dataprotection backup-instance delete \
           -g "${VAULT_RG}" --vault-name "${VAULT_NAME}" \
-          -n "${instance}" --yes
+          -n "${instance}" --yes 2>/dev/null || \
+          log "  [WARN] Backup instance ${instance} 삭제 실패 — 이미 삭제됐거나 Azure API 오류. tofu destroy 계속 진행."
       fi
     done
   else

@@ -26,6 +26,9 @@ BACKEND_FILE="backend.tf"
 SA_NAME=$(grep 'storage_account_name' "${BACKEND_FILE}" | sed 's/.*= *"\(.*\)".*/\1/')
 RG_NAME=$(grep 'resource_group_name' "${BACKEND_FILE}" | sed 's/.*= *"\(.*\)".*/\1/')
 CONTAINER=$(grep 'container_name' "${BACKEND_FILE}" | sed 's/.*= *"\(.*\)".*/\1/')
+# backend.tf에서 location 파싱, 없으면 환경변수 또는 기본값 사용
+BACKEND_LOCATION=$(grep 'location' "${BACKEND_FILE}" | sed 's/.*= *"\(.*\)".*/\1/' | head -1)
+LOCATION="${BACKEND_LOCATION:-${LOCATION:-koreacentral}}"
 
 echo "============================================================"
 echo "  Backend 설정"
@@ -49,11 +52,11 @@ echo "[info] 구독: ${SUB_ID}"
 if ! az storage account show --name "${SA_NAME}" --resource-group "${RG_NAME}" &>/dev/null; then
   echo "[info] Storage Account '${SA_NAME}'이 없습니다. 생성 중..."
 
-  az group create --name "${RG_NAME}" --location koreacentral -o none
+  az group create --name "${RG_NAME}" --location "${LOCATION}" -o none
   az storage account create \
     --name "${SA_NAME}" \
     --resource-group "${RG_NAME}" \
-    --location koreacentral \
+    --location "${LOCATION}" \
     --sku Standard_LRS \
     --allow-blob-public-access false \
     --min-tls-version TLS1_2 \

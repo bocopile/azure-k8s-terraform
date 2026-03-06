@@ -479,6 +479,7 @@ resource "azurerm_virtual_machine_extension" "jumpbox_addon" {
         --overwrite-existing
       %{endfor~}
 
+      chmod 600 /root/.kube/config
       # kubelogin MSI 모드로 변환 (Azure RBAC + local_account_disabled 대응)
       kubelogin convert-kubeconfig -l msi
 
