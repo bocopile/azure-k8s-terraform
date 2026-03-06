@@ -67,6 +67,11 @@ variable "enable_mcas" {
   description = "Enable Sentinel MCAS Data Connector (Microsoft 365 E5 / EMS E5 라이선스 필요, enable_sentinel = true 전제)"
   type        = bool
   default     = false
+
+  validation {
+    condition     = !(var.enable_mcas && !var.enable_sentinel)
+    error_message = "enable_mcas = true 는 enable_sentinel = true 를 필요로 합니다."
+  }
 }
 
 variable "tags" {

@@ -88,7 +88,7 @@ locals {
     backup_vault      = "bv-${local.prefix}"
     backup_policy     = "bp-aks-daily"
     bastion           = "bastion-${local.prefix}"
-    bastion_pip       = "pip-bastion" # Bastion 전용 Public IP
+    bastion_pip       = "pip-bastion-${local.prefix}" # Bastion 전용 Public IP
     jumpbox_vm        = "vm-jumpbox"
     jumpbox_nic       = "nic-jumpbox"
     grafana           = "grafana-${local.prefix}"
