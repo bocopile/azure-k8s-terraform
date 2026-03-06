@@ -21,6 +21,10 @@ resource "azurerm_network_watcher" "nw" {
   resource_group_name = module.resource_group.common_resource_group_name
   tags                = var.tags
 
+  # lifecycle.prevent_destroy 의도적 미설정:
+  # Network Watcher는 구독당 리전별 1개 제한이 있어 이름 충돌 시 재생성 불가.
+  # prevent_destroy = true 시 tofu destroy 자체가 차단되어 전체 삭제가 불가능해짐.
+  # → 삭제/재생성 필요 시 수동 관리: az network watcher delete
 }
 
 resource "azurerm_storage_account" "flow_logs" {

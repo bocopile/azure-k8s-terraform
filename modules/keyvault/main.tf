@@ -10,8 +10,8 @@
 #   2) kv_suffix 변경하여 새 이름으로 재생성
 #
 # Provider 설정 (main.tf):
-#   purge_soft_delete_on_destroy = false  → destroy 시 purge 안 함 (기본, 안전)
-#   purge_soft_delete_on_destroy = true   → destroy 시 즉시 purge (데이터 손실 주의)
+#   purge_soft_delete_on_destroy = true   → destroy 시 즉시 purge (현재 설정 — 재배포 편의)
+#   purge_soft_delete_on_destroy = false  → destroy 시 purge 안 함 (prod 권장 — 90일 보존)
 #
 # 상세 절차: DESTROY.md §4 참조
 # ============================================================

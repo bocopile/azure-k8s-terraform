@@ -107,8 +107,12 @@ tofu state list
 
 ## 4. Step 3 — Key Vault Purge
 
+> **현재 설정**: `purge_soft_delete_on_destroy = true` (main.tf provider 블록)
+> `tofu destroy` 실행 시 KV가 **즉시 영구 삭제**된다 — 별도 purge 명령 불필요.
+> prod 환경에서는 `purge_soft_delete_on_destroy = false`로 변경 후 아래 절차를 따를 것.
+
 Azure Key Vault는 `soft_delete_retention_days = 90`으로 설정되어 있어
-`tofu destroy` 후에도 **soft-deleted 상태로 90일간 보존**된다.
+`purge_soft_delete_on_destroy = false`인 경우 destroy 후에도 **soft-deleted 상태로 90일간 보존**된다.
 
 ### 동일 이름으로 재생성 시 문제
 
@@ -137,10 +141,10 @@ az keyvault show --name kv-k8s-<suffix> --query "properties.enablePurgeProtectio
 #   → az keyvault purge 명령으로 즉시 영구 삭제 가능
 ```
 
-> **provider 설정**: `main.tf`의 `purge_soft_delete_on_destroy = false`는
-> Terraform destroy 시 KV를 purge하지 않겠다는 의미다.
-> Demo 환경에서 완전 삭제를 원하면 `true`로 변경 가능하나,
-> 실수로 인한 데이터 손실 위험이 있으므로 기본값 `false` 유지를 권장한다.
+> **provider 설정**: `main.tf`의 `purge_soft_delete_on_destroy = true`는
+> Terraform destroy 시 KV를 즉시 purge(영구 삭제)하겠다는 의미다.
+> 재배포 시 soft-deleted KV가 이름 충돌을 일으키지 않도록 편의성 우선으로 설정.
+> **주의**: 실수로 destroy 시 KV 데이터 복구 불가 — prod 환경에서는 `false`로 변경 권장.
 
 ---
 
