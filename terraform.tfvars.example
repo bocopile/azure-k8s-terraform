@@ -25,21 +25,35 @@ jumpbox_ssh_public_key = "ssh-rsa AAAA... your-public-key-here"
 # cert-manager DNS-01 챌린지용 DNS Zone (선택 사항, 비워두면 생략)
 # dns_zone_id = "/subscriptions/.../resourceGroups/.../providers/Microsoft.Network/dnsZones/example.com"
 
-# --- 환경 설정 (기본값이 있어 선택 사항) ---
+# ============================================================
+# [데모/시연] 최소 비용 설정
+# 모든 addon 설치가 가능한 최소 스펙 유지 + 비용 최소화
+# 예상 비용: 약 $400~600/월 (Standard 3노드 대비 ~60% 절감)
+#
+# ※ VM 크기(vm_size_system/ingress)는 줄이면 안 됩니다.
+#    Istio + cert-manager + ESO 등 addon 설치에 최소 2vCPU/8GB 필요.
+# ============================================================
+aks_sku_tier       = "Free"   # SLA 없음, 데모/시연용. 운영: "Standard"
+system_node_count  = 1        # HA 불필요한 데모용. 운영: 3 (AZ 분산)
+ingress_node_count = 1        # 운영: 3
+
+enable_grafana     = false    # Grafana 비용 절약. 필요 시 true + grafana_sku = "Essential"
+
+# --- 환경 설정 ---
 # location              = "koreacentral"
 # prefix                = "k8s"
 # kubernetes_version    = "1.35"
 
-# --- VM 크기 ---
-# vm_size_system        = "Standard_D2s_v4"
-# vm_size_ingress       = "Standard_D2s_v4"
-# vm_size_jumpbox       = "Standard_B2s"
+# --- VM 크기 (addon 설치 최소 요구 스펙 — 변경 금지) ---
+# vm_size_system        = "Standard_D2s_v4"   # 2vCPU/8GB — Istio/cert-manager 최소 요구치
+# vm_size_ingress       = "Standard_D2s_v4"   # 2vCPU/8GB
+# vm_size_jumpbox       = "Standard_B2s"      # 2vCPU/4GB
 
 # --- SKU / 가격 등급 ---
-# aks_sku_tier          = "Standard"     # Free | Standard
 # acr_sku               = "Basic"        # Basic | Standard | Premium
 # bastion_sku           = "Basic"        # Basic | Standard
 # keyvault_sku          = "standard"     # standard | premium
+# grafana_sku           = "Essential"    # 데모: Essential, 운영: Standard
 
 # --- ACR Private Endpoint (Standard/Premium SKU 필요, Basic은 미지원) ---
 # acr_sku                     = "Standard"   # PE 사용 시 Basic → Standard 변경 필수
@@ -51,13 +65,11 @@ jumpbox_ssh_public_key = "ssh-rsa AAAA... your-public-key-here"
 # backup_retention_duration = "P7D"
 
 # --- 보안 ---
-# keyvault_purge_protection = true       # 기본값: true (demo: false로 override)
-# grafana_public_access     = false      # 기본값: false (demo: true로 override)
-# grafana_sku               = "Standard" # Standard | Essential
+# keyvault_purge_protection = false      # 기본값: false (prod: true 권장)
+# grafana_public_access     = true       # 데모: true, 운영: false (PE 추가 필요)
 # backup_soft_delete        = false      # 기본값: false (prod: true 권장)
 
 # --- 관측성 ---
-# enable_grafana            = true
 # enable_sentinel           = false
 
 # ============================================================
