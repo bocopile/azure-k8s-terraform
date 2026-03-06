@@ -30,6 +30,41 @@ variable "backup_retention_duration" {
   default     = "P7D"
 }
 
+variable "backup_storage_account_name" {
+  description = "Storage Account name for AKS Backup Extension blob staging (globally unique, lowercase alphanumeric)"
+  type        = string
+}
+
+variable "subscription_id" {
+  description = "Azure Subscription ID (AKS Backup Extension configuration)"
+  type        = string
+}
+
+variable "tenant_id" {
+  description = "Azure Tenant ID (AKS Backup Extension credentials)"
+  type        = string
+}
+
+variable "cluster_ids" {
+  description = "AKS cluster resource IDs by cluster key"
+  type        = map(string)
+}
+
+variable "cluster_rg_names" {
+  description = "AKS cluster resource group names by cluster key (snapshot destination)"
+  type        = map(string)
+}
+
+variable "cluster_rg_ids" {
+  description = "AKS cluster resource group resource IDs by cluster key (RBAC scope)"
+  type        = map(string)
+}
+
+variable "kubelet_object_ids" {
+  description = "Kubelet managed identity object IDs by cluster key (RBAC for disk snapshots)"
+  type        = map(string)
+}
+
 variable "tags" {
   description = "Resource tags"
   type        = map(string)

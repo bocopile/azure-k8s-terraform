@@ -27,6 +27,29 @@ resource "azurerm_data_protection_backup_vault" "vault" {
 # AKS Backup Policy — Daily at 02:00 UTC, 7-day retention
 # ============================================================
 
+# ============================================================
+# Backup Staging Storage Account
+# AKS Backup Extension이 백업 메타데이터/아티팩트를 임시 저장하는 Blob Storage
+# ============================================================
+
+resource "azurerm_storage_account" "backup" {
+  name                     = var.backup_storage_account_name
+  location                 = var.location
+  resource_group_name      = var.rg_common
+  account_tier             = "Standard"
+  account_replication_type = "LRS"
+  min_tls_version          = "TLS1_2"
+
+  tags = var.tags
+}
+
+resource "azurerm_storage_container" "backup" {
+  for_each = var.cluster_ids
+
+  name               = "bkp-${each.key}"
+  storage_account_id = azurerm_storage_account.backup.id
+}
+
 resource "azurerm_data_protection_backup_policy_kubernetes_cluster" "aks_policy" {
   name                = var.policy_name
   resource_group_name = var.rg_common
@@ -40,4 +63,87 @@ resource "azurerm_data_protection_backup_policy_kubernetes_cluster" "aks_policy"
       data_store_type = "OperationalStore"
     }
   }
+}
+
+# ============================================================
+# RBAC — Backup Vault MSI 권한 부여
+# ============================================================
+
+# Backup Vault MSI → Storage Account: 백업 데이터 읽기/쓰기
+resource "azurerm_role_assignment" "vault_storage_blob" {
+  scope                = azurerm_storage_account.backup.id
+  role_definition_name = "Storage Blob Data Contributor"
+  principal_id         = azurerm_data_protection_backup_vault.vault.identity[0].principal_id
+}
+
+# Backup Vault MSI → 각 클러스터 RG: 스냅샷 관리 (Snapshot 생성/삭제)
+resource "azurerm_role_assignment" "vault_cluster_rg_contributor" {
+  for_each = var.cluster_rg_ids
+
+  scope                = each.value
+  role_definition_name = "Contributor"
+  principal_id         = azurerm_data_protection_backup_vault.vault.identity[0].principal_id
+}
+
+# Kubelet Identity → 각 클러스터 RG: 디스크 스냅샷 생성 권한
+resource "azurerm_role_assignment" "kubelet_snapshot_contributor" {
+  for_each = var.cluster_rg_ids
+
+  scope                = each.value
+  role_definition_name = "Contributor"
+  principal_id         = var.kubelet_object_ids[each.key]
+}
+
+# ============================================================
+# AKS Backup Extension (per cluster)
+# Terraform으로 Extension을 관리 — 09-backup-extension.sh 불필요
+# ============================================================
+
+resource "azurerm_kubernetes_cluster_extension" "backup" {
+  for_each = var.cluster_ids
+
+  name           = "azure-aks-backup"
+  cluster_id     = each.value
+  extension_type = "microsoft.dataprotection.kubernetes"
+  release_train  = "stable"
+  # auto_upgrade_minor_version_enabled: azurerm ~4.14 미지원 — 기본 동작(자동 업그레이드) 사용
+
+  configuration_settings = {
+    "configuration.backupStorageLocation.bucket"                        = azurerm_storage_container.backup[each.key].name
+    "configuration.backupStorageLocation.config.storageAccount"         = azurerm_storage_account.backup.name
+    "configuration.backupStorageLocation.config.resourceGroup"          = azurerm_storage_account.backup.resource_group_name
+    "configuration.backupStorageLocation.config.subscriptionId"         = var.subscription_id
+    "credentials.tenantId"                                              = var.tenant_id
+  }
+
+  depends_on = [
+    azurerm_role_assignment.vault_storage_blob,
+    azurerm_role_assignment.vault_cluster_rg_contributor,
+    azurerm_role_assignment.kubelet_snapshot_contributor,
+  ]
+}
+
+# ============================================================
+# AKS Backup Instance (per cluster)
+# Vault + Policy + Extension 모두 준비된 후 연결
+# ============================================================
+
+resource "azurerm_data_protection_backup_instance_kubernetes_cluster" "aks" {
+  for_each = var.cluster_ids
+
+  name     = "bi-aks-${each.key}"
+  location = var.location
+  vault_id = azurerm_data_protection_backup_vault.vault.id
+
+  backup_policy_id             = azurerm_data_protection_backup_policy_kubernetes_cluster.aks_policy.id
+  kubernetes_cluster_id        = each.value
+  snapshot_resource_group_name = var.cluster_rg_names[each.key]
+  # kubernetes_cluster_extension_id: azurerm ~4.14 미지원 속성 — Extension 설치 후 자동 연결됨
+
+  depends_on = [
+    azurerm_kubernetes_cluster_extension.backup,
+    azurerm_role_assignment.vault_cluster_rg_contributor,
+    azurerm_role_assignment.vault_storage_blob,
+    azurerm_role_assignment.kubelet_snapshot_contributor,
+  ]
 }
