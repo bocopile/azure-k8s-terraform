@@ -396,10 +396,61 @@ az aks get-versions --location koreacentral \
 
 ### 3. 초기화 및 배포
 
+#### 3-1. Remote Backend 초기화
+
+`backend.tf`는 Azure Blob Storage를 state 저장소로 사용합니다.
+`tofu init` 전에 Storage Account가 존재하고 RBAC이 전파되어 있어야 합니다.
+
+**자동 처리 스크립트 (권장)**
+
 ```bash
-# 초기화
+# Storage Account 없으면 자동 생성 + RBAC 전파 대기(방법 B) + fallback(방법 A) 포함
+chmod +x scripts/init-backend.sh
+./scripts/init-backend.sh
+
+# 로컬 state를 remote backend로 처음 마이그레이션하는 경우
+./scripts/init-backend.sh --migrate-state
+```
+
+스크립트 동작 순서:
+
+```
+① backend.tf에서 Storage Account 이름/RG 자동 파싱
+② Storage Account 없으면 자동 생성 + 컨테이너 생성 + RBAC 부여
+③ [방법 B] Azure AD 인증으로 RBAC 전파 확인 (최대 5분 대기)
+④ [방법 A] RBAC 미전파 시 ARM_ACCESS_KEY 환경변수로 스토리지 키 fallback
+⑤ tofu init 실행
+```
+
+**수동 처리 (문제 발생 시)**
+
+```bash
+# 방법 A — 스토리지 키로 즉시 인증 (RBAC 전파 전 403 우회)
+export ARM_ACCESS_KEY=$(az storage account keys list \
+  --account-name stk8stfstate2cfd \
+  --resource-group rg-tfstate \
+  --query "[0].value" -o tsv)
 tofu init
 
+# 방법 B — RBAC 전파 확인 후 Azure AD 인증으로 실행
+# 아래 명령이 숫자(0 이상)를 반환하면 전파 완료
+az storage blob list \
+  --container-name tfstate \
+  --account-name stk8stfstate2cfd \
+  --auth-mode login \
+  --query "length(@)" -o tsv
+tofu init
+```
+
+> **언제 403이 발생하나?**
+> `use_azuread_auth = true` 설정 시 Azure AD RBAC으로 인증합니다.
+> `Storage Blob Data Contributor` 역할을 방금 부여했다면 Azure AD가 전파하는 데
+> **1~5분**이 걸립니다. 이 시간 동안 `tofu init`을 실행하면 403이 발생합니다.
+> 스크립트는 이를 자동으로 감지하고 스토리지 키로 fallback합니다.
+
+#### 3-2. 검증 및 배포
+
+```bash
 # 검증
 tofu validate
 
@@ -814,6 +865,7 @@ rm terraform.tfstate terraform.tfstate.backup
 
 | 증상 | 원인 | 해결 |
 |---|---|---|
+| `tofu init` 시 403 AuthorizationPermissionMismatch | RBAC 전파 지연 (방금 역할 부여) | `./scripts/init-backend.sh` 실행 (자동 fallback) 또는 `export ARM_ACCESS_KEY=$(az storage account keys list ...)` |
 | `tofu apply` 시 Network Watcher 충돌 | Azure가 VNet 생성 시 자동 생성 | `tofu import azurerm_network_watcher.nw /subscriptions/.../NetworkWatcher_koreacentral` |
 | Key Vault 이름 충돌 (`SoftDeleted`) | 이전 삭제 후 soft-delete 상태 잔존 | `az keyvault purge --name <kv-name>` |
 | AKS 버전 미지원 | 리전별 가용 버전 상이 | `az aks get-versions --location koreacentral` 확인 |
