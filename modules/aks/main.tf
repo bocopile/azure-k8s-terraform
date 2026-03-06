@@ -306,11 +306,13 @@ resource "azurerm_linux_virtual_machine" "jumpbox" {
   }
 
   # Ubuntu 24.04 LTS (Canonical 기본 이미지 — Marketplace 약관 동의 불필요, plan 블록 없음)
+  # version: 운영 환경에서는 jumpbox_image_version 변수로 특정 버전 고정 권장
+  #   최신 버전 확인: az vm image list -p Canonical -f ubuntu-24_04-lts --sku server --all -o table | tail -5
   source_image_reference {
     publisher = "Canonical"
     offer     = "ubuntu-24_04-lts"
     sku       = "server"
-    version   = "latest"
+    version   = var.jumpbox_image_version
   }
 
   # Jump VM 초기화: az cli, kubectl, kubelogin, helm, k9s, kubent, istioctl
@@ -337,26 +339,49 @@ resource "azurerm_linux_virtual_machine" "jumpbox" {
     az aks install-cli --install-location /usr/local/bin/kubectl \
       --kubelogin-install-location /usr/local/bin/kubelogin || true
 
-    # Helm 3 (pinned version)
+    # ── Helm 3 (pinned version + SHA256 검증) ──────────────────────
     HELM_VERSION="v3.20.0"
-    curl -fsSL "https://get.helm.sh/helm-$${HELM_VERSION}-linux-amd64.tar.gz" \
-      | tar -xz --strip-components=1 -C /usr/local/bin linux-amd64/helm
+    HELM_TAR="helm-$${HELM_VERSION}-linux-amd64.tar.gz"
+    curl -fsSL "https://get.helm.sh/$${HELM_TAR}" -o "/tmp/$${HELM_TAR}"
+    HELM_SHA256=$(curl -fsSL "https://get.helm.sh/$${HELM_TAR}.sha256sum" | awk '{print $1}')
+    echo "$${HELM_SHA256}  /tmp/$${HELM_TAR}" | sha256sum -c -
+    tar -xz --strip-components=1 -C /usr/local/bin linux-amd64/helm -f "/tmp/$${HELM_TAR}"
+    rm -f "/tmp/$${HELM_TAR}"
 
-    # k9s (pinned version)
+    # ── k9s (pinned version + SHA256 검증) ─────────────────────────
     K9S_VERSION="v0.50.18"
-    curl -fsSL "https://github.com/derailed/k9s/releases/download/$${K9S_VERSION}/k9s_Linux_amd64.tar.gz" \
-      | tar -xz -C /usr/local/bin k9s
+    K9S_TAR="k9s_Linux_amd64.tar.gz"
+    curl -fsSL "https://github.com/derailed/k9s/releases/download/$${K9S_VERSION}/$${K9S_TAR}" \
+      -o "/tmp/$${K9S_TAR}"
+    K9S_SHA256=$(curl -fsSL "https://github.com/derailed/k9s/releases/download/$${K9S_VERSION}/checksums.txt" \
+      | grep "$${K9S_TAR}" | awk '{print $1}')
+    echo "$${K9S_SHA256}  /tmp/$${K9S_TAR}" | sha256sum -c -
+    tar -xz -C /usr/local/bin k9s -f "/tmp/$${K9S_TAR}"
+    rm -f "/tmp/$${K9S_TAR}"
 
-    # kubent (pinned version)
+    # ── kubent (pinned version + SHA256 검증) ──────────────────────
     KUBENT_VERSION="0.7.3"
-    curl -fsSL "https://github.com/doitintl/kube-no-trouble/releases/download/$${KUBENT_VERSION}/kubent-$${KUBENT_VERSION}-linux-amd64.tar.gz" \
-      | tar -xz -C /usr/local/bin
+    KUBENT_TAR="kubent-$${KUBENT_VERSION}-linux-amd64.tar.gz"
+    curl -fsSL "https://github.com/doitintl/kube-no-trouble/releases/download/$${KUBENT_VERSION}/$${KUBENT_TAR}" \
+      -o "/tmp/$${KUBENT_TAR}"
+    KUBENT_SHA256=$(curl -fsSL "https://github.com/doitintl/kube-no-trouble/releases/download/$${KUBENT_VERSION}/checksums.txt" \
+      | grep "$${KUBENT_TAR}" | awk '{print $1}')
+    echo "$${KUBENT_SHA256}  /tmp/$${KUBENT_TAR}" | sha256sum -c -
+    tar -xz -C /usr/local/bin -f "/tmp/$${KUBENT_TAR}"
+    rm -f "/tmp/$${KUBENT_TAR}"
 
-    # istioctl (pinned version)
+    # ── istioctl (pinned version + SHA256 검증) ─────────────────────
+    # curl | sh 패턴 제거 — GitHub release 직접 다운로드 + 체크섬 검증
     ISTIO_VERSION="1.28.0"
-    curl -sL https://istio.io/downloadIstio | ISTIO_VERSION=$${ISTIO_VERSION} TARGET_ARCH=x86_64 sh -
-    mv istio-*/bin/istioctl /usr/local/bin/istioctl
-    rm -rf istio-*
+    ISTIO_TAR="istio-$${ISTIO_VERSION}-linux-amd64.tar.gz"
+    curl -fsSL "https://github.com/istio/istio/releases/download/$${ISTIO_VERSION}/$${ISTIO_TAR}" \
+      -o "/tmp/$${ISTIO_TAR}"
+    ISTIO_SHA256=$(curl -fsSL "https://github.com/istio/istio/releases/download/$${ISTIO_VERSION}/$${ISTIO_TAR}.sha256" \
+      | awk '{print $1}')
+    echo "$${ISTIO_SHA256}  /tmp/$${ISTIO_TAR}" | sha256sum -c -
+    tar -xz -C /tmp -f "/tmp/$${ISTIO_TAR}" "istio-$${ISTIO_VERSION}/bin/istioctl"
+    mv "/tmp/istio-$${ISTIO_VERSION}/bin/istioctl" /usr/local/bin/istioctl
+    rm -rf "/tmp/$${ISTIO_TAR}" "/tmp/istio-$${ISTIO_VERSION}"
 
     # ~/.bashrc 편의 설정 (var.clusters 기반 동적 생성)
     cat >> /home/${var.jumpbox_admin_username}/.bashrc <<'BASHRC'
@@ -461,7 +486,10 @@ resource "azurerm_virtual_machine_extension" "jumpbox_addon" {
       if [[ -n "${var.addon_repo_url}" ]]; then
         REPO_DIR="/opt/addon-repo"
         rm -rf "$$REPO_DIR"
-        git clone "${var.addon_repo_url}" "$$REPO_DIR"
+        # --depth 1: shallow clone으로 속도 단축
+        # --branch: 배포 재현성 확보 (HEAD 최신 커밋 사용 방지)
+        git clone --depth 1 --branch "${var.addon_repo_branch}" \
+          "${var.addon_repo_url}" "$$REPO_DIR"
         cd "$$REPO_DIR"
         chmod +x addons/install.sh
         ./addons/install.sh \

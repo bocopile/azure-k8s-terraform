@@ -126,6 +126,18 @@ variable "jumpbox_nic_name" {
   type        = string
 }
 
+variable "jumpbox_image_version" {
+  description = <<-EOT
+    Jump VM Ubuntu 24.04 LTS 이미지 버전 핀.
+    재배포 시 예기치 않은 이미지 변경 방지.
+    최신 버전 확인:
+      az vm image list -p Canonical -f ubuntu-24_04-lts --sku server --all -o table | tail -5
+    운영 환경에서는 반드시 특정 버전으로 고정하세요.
+  EOT
+  type        = string
+  default     = "latest"
+}
+
 variable "jumpbox_private_ip" {
   description = "Static private IP for Jump VM (must be within jumpbox subnet 10.1.1.0/24)"
   type        = string
@@ -189,6 +201,12 @@ variable "addon_repo_url" {
   description = "Addon 설치 스크립트가 포함된 git 레포 URL (빈 문자열이면 addon 설치 건너뜀)"
   type        = string
   default     = ""
+}
+
+variable "addon_repo_branch" {
+  description = "Addon 레포 브랜치/태그 (배포 재현성 확보 — HEAD 사용 방지)"
+  type        = string
+  default     = "main"
 }
 
 variable "addon_env" {

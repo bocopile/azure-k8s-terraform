@@ -295,6 +295,23 @@ variable "addon_repo_url" {
   default     = ""
 }
 
+variable "addon_repo_branch" {
+  description = "Addon 레포 브랜치/태그 — 배포 재현성 확보 (예: main, v1.2.0)"
+  type        = string
+  default     = "main"
+}
+
+variable "jumpbox_image_version" {
+  description = <<-EOT
+    Jump VM Ubuntu 24.04 LTS 이미지 버전. 운영 환경에서는 특정 버전으로 고정 권장.
+    최신 버전 확인:
+      az vm image list -p Canonical -f ubuntu-24_04-lts --sku server --all -o table | tail -5
+    예시: "24.04.202501140"
+  EOT
+  type        = string
+  default     = "latest"
+}
+
 # ============================================================
 # Addon 환경변수 — install.sh에 주입 (tofu apply 한 번으로 전체 배포)
 # ============================================================
@@ -318,8 +335,8 @@ variable "addon_env" {
         GRAFANA_ENABLED         = "false"
       }
   EOT
-  type    = map(string)
-  default = {}
+  type        = map(string)
+  default     = {}
 }
 
 variable "flux_ssh_private_key" {
@@ -330,9 +347,9 @@ variable "flux_ssh_private_key" {
     생성: ssh-keygen -t ed25519 -C flux-deploy -f ~/.ssh/flux-deploy-key -N ''
     공개키(flux-deploy-key.pub)를 GitHub/GitLab Deploy Key로 등록하세요.
   EOT
-  type      = string
-  sensitive = true
-  default   = ""
+  type        = string
+  sensitive   = true
+  default     = ""
 }
 
 # ============================================================
@@ -361,6 +378,11 @@ variable "redis_capacity" {
   description = "Redis Premium Capacity (1=6GB / 2=13GB / 3=26GB)"
   type        = number
   default     = 1
+
+  validation {
+    condition     = contains([1, 2, 3], var.redis_capacity)
+    error_message = "redis_capacity must be 1, 2, or 3."
+  }
 }
 
 variable "mysql_admin_username" {
@@ -385,6 +407,11 @@ variable "servicebus_capacity" {
   description = "Service Bus Premium Capacity Units (1/2/4/8)"
   type        = number
   default     = 1
+
+  validation {
+    condition     = contains([1, 2, 4, 8], var.servicebus_capacity)
+    error_message = "servicebus_capacity must be 1, 2, 4, or 8."
+  }
 }
 
 variable "servicebus_queues" {

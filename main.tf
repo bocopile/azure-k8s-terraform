@@ -76,8 +76,8 @@ module "resource_group" {
 module "network" {
   source = "./modules/network"
 
-  location  = local.location
-  rg_common = local.rg_common
+  location            = local.location
+  rg_common           = local.rg_common
   vnets               = local.vnets
   aks_subnets         = local.aks_subnets
   bastion_subnet_cidr = local.bastion_subnet_cidr
@@ -128,16 +128,16 @@ module "acr" {
 module "identity" {
   source = "./modules/identity"
 
-  location                = local.location
-  rg_common               = local.rg_common
-  clusters                = local.clusters
-  acr_id                  = module.acr.acr_id
-  vnet_ids                = module.network.vnet_ids
-  key_vault_id            = module.keyvault.key_vault_id
-  aks_private_dns_zone_id   = module.network.aks_private_dns_zone_id
+  location                   = local.location
+  rg_common                  = local.rg_common
+  clusters                   = local.clusters
+  acr_id                     = module.acr.acr_id
+  vnet_ids                   = module.network.vnet_ids
+  key_vault_id               = module.keyvault.key_vault_id
+  aks_private_dns_zone_id    = module.network.aks_private_dns_zone_id
   enable_dns_role_assignment = true
-  dns_zone_id               = var.dns_zone_id
-  tags                    = var.tags
+  dns_zone_id                = var.dns_zone_id
+  tags                       = var.tags
 
   depends_on = [module.resource_group, module.network, module.acr, module.keyvault]
 }
@@ -145,16 +145,16 @@ module "identity" {
 module "monitoring" {
   source = "./modules/monitoring"
 
-  location               = local.location
-  rg_common              = local.rg_common
-  log_analytics_name     = local.names.log_analytics
-  monitor_workspace_name = local.names.monitor_workspace
-  app_insights_name      = local.names.app_insights
-  grafana_name           = local.names.grafana
-  enable_grafana         = var.enable_grafana
-  enable_sentinel        = var.enable_sentinel
-  enable_mcas            = var.enable_mcas
-  log_retention_days     = var.log_retention_days
+  location                 = local.location
+  rg_common                = local.rg_common
+  log_analytics_name       = local.names.log_analytics
+  monitor_workspace_name   = local.names.monitor_workspace
+  app_insights_name        = local.names.app_insights
+  grafana_name             = local.names.grafana
+  enable_grafana           = var.enable_grafana
+  enable_sentinel          = var.enable_sentinel
+  enable_mcas              = var.enable_mcas
+  log_retention_days       = var.log_retention_days
   grafana_public_access    = var.grafana_public_access
   grafana_sku              = var.grafana_sku
   grafana_admin_object_ids = var.grafana_admin_object_ids
@@ -240,20 +240,22 @@ module "aks" {
   log_analytics_workspace_id = module.monitoring.log_analytics_workspace_id
   monitor_workspace_id       = module.monitoring.monitor_workspace_id
 
-  jumpbox_admin_username = var.jumpbox_admin_username
-  jumpbox_ssh_public_key = var.jumpbox_ssh_public_key
-  jumpbox_vm_name        = local.names.jumpbox_vm
-  jumpbox_nic_name       = local.names.jumpbox_nic
-  jumpbox_private_ip     = local.jumpbox_private_ip
-  bastion_name           = local.names.bastion
-  bastion_pip_name       = local.names.bastion_pip
-  aks_sku_tier           = var.aks_sku_tier
-  bastion_sku            = var.bastion_sku
-  system_node_count      = var.system_node_count
-  ingress_node_count     = var.ingress_node_count
+  jumpbox_admin_username    = var.jumpbox_admin_username
+  jumpbox_ssh_public_key    = var.jumpbox_ssh_public_key
+  jumpbox_vm_name           = local.names.jumpbox_vm
+  jumpbox_nic_name          = local.names.jumpbox_nic
+  jumpbox_private_ip        = local.jumpbox_private_ip
+  bastion_name              = local.names.bastion
+  bastion_pip_name          = local.names.bastion_pip
+  aks_sku_tier              = var.aks_sku_tier
+  bastion_sku               = var.bastion_sku
+  system_node_count         = var.system_node_count
+  ingress_node_count        = var.ingress_node_count
   subscription_id           = var.subscription_id
   addon_repo_url            = var.addon_repo_url
+  addon_repo_branch         = var.addon_repo_branch
   addon_env                 = var.addon_env
+  jumpbox_image_version     = var.jumpbox_image_version
   key_vault_name            = module.keyvault.key_vault_name
   prometheus_query_endpoint = module.monitoring.monitor_workspace_query_endpoint
 

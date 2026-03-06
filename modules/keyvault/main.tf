@@ -56,7 +56,8 @@ resource "azurerm_role_assignment" "deployer_kv_admin" {
   principal_id         = data.azurerm_client_config.current.object_id
   role_definition_name = "Key Vault Administrator"
   scope                = azurerm_key_vault.kv.id
-  principal_type       = "User"
+  # principal_type 미지정 → azurerm이 User/ServicePrincipal/ManagedIdentity 자동 판별
+  # 고정 시 CI/CD 서비스 프린시플 실행 환경에서 role assignment 실패
 }
 
 # ============================================================
