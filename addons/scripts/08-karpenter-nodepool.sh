@@ -30,7 +30,8 @@ spec:
           values: ["D"]
         - key: karpenter.sh/capacity-type
           operator: In
-          values: ["spot", "on-demand"]
+          # ADR-007: Spot 전용 — on-demand는 명시적 오버라이드 없이 금지
+          values: ["spot"]
         - key: kubernetes.io/arch
           operator: In
           values: ["amd64"]

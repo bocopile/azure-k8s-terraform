@@ -5,7 +5,7 @@
 # ARCHITECTURE.md §5.3: Istio GA 전환 대비 CRD 사전 배포
 # 현재: Istio classic API 사용, Gateway API CRD만 설치 (리소스 미사용)
 #
-# CRD 버전: v1.3.0
+# CRD 버전: v1.5.0
 # 설치 대상: 전체 클러스터 (mgmt, app1, app2)
 #
 # Usage: ./00b-gateway-api.sh <cluster-name>
