@@ -38,6 +38,12 @@ helm upgrade --install kiali-operator kiali/kiali-operator \
 
 echo "[kiali] ✓ Kiali operator v${KIALI_VERSION} installed on ${CLUSTER}"
 
+# ---- PROMETHEUS_URL 확인 ----
+if [[ -z "${PROMETHEUS_URL:-}" ]]; then
+  echo "[kiali][WARN] PROMETHEUS_URL 미설정 — Kiali 메트릭 기능 비활성화됩니다."
+  echo "[kiali][WARN] Azure Monitor Workspace DCE 쿼리 엔드포인트를 addon_env.PROMETHEUS_URL 에 설정하세요."
+fi
+
 # ---- Kiali CR 생성 ----
 # Operator가 준비될 때까지 대기
 echo "[kiali] Waiting for kiali-operator to be ready..."

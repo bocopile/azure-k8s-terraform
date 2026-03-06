@@ -117,6 +117,28 @@ variable "vm_size_ingress" {
   default     = "Standard_D2s_v4"
 }
 
+variable "system_node_count" {
+  description = "Number of nodes in the AKS system node pool (per cluster)"
+  type        = number
+  default     = 3
+
+  validation {
+    condition     = var.system_node_count >= 1 && var.system_node_count <= 10
+    error_message = "system_node_count must be between 1 and 10."
+  }
+}
+
+variable "ingress_node_count" {
+  description = "Number of nodes in the AKS ingress node pool (mgmt + app1 only)"
+  type        = number
+  default     = 3
+
+  validation {
+    condition     = var.ingress_node_count >= 1 && var.ingress_node_count <= 10
+    error_message = "ingress_node_count must be between 1 and 10."
+  }
+}
+
 variable "vm_size_jumpbox" {
   description = "VM size for Jump VM"
   type        = string

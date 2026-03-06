@@ -249,6 +249,8 @@ module "aks" {
   bastion_pip_name       = local.names.bastion_pip
   aks_sku_tier           = var.aks_sku_tier
   bastion_sku            = var.bastion_sku
+  system_node_count      = var.system_node_count
+  ingress_node_count     = var.ingress_node_count
   subscription_id           = var.subscription_id
   addon_repo_url            = var.addon_repo_url
   addon_env                 = var.addon_env
