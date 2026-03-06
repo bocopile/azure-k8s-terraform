@@ -325,9 +325,11 @@ fi
 # 9. Jumpbox & Bastion
 # ----------------------------------------------------------
 section "Jumpbox & Bastion"
-check_vm      "vm-jumpbox"          "${RG_COMMON}"
-check_bastion "bastion-${PREFIX}"   "${RG_COMMON}"
-check_pip     "pip-bastion"         "${RG_COMMON}"
+# jumpbox/bastion은 mgmt 클러스터 RG에 위치
+RG_MGMT="rg-${PREFIX}-mgmt"
+check_vm      "vm-jumpbox"          "${RG_MGMT}"
+check_bastion "bastion-${PREFIX}"   "${RG_MGMT}"
+check_pip     "pip-bastion"         "${RG_MGMT}"
 
 # ============================================================
 # Summary

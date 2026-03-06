@@ -123,6 +123,16 @@ resource "azurerm_kubernetes_cluster_extension" "backup" {
   ]
 }
 
+# Backup Extension aksAssignedIdentity → 각 클러스터 RG: 스냅샷 Contributor 권한
+# Extension 설치 후 동적으로 생성되는 MSI에 역할 부여
+resource "azurerm_role_assignment" "extension_snapshot_contributor" {
+  for_each = var.cluster_rg_ids
+
+  scope                = each.value
+  role_definition_name = "Contributor"
+  principal_id         = azurerm_kubernetes_cluster_extension.backup[each.key].aks_assigned_identity[0].principal_id
+}
+
 # ============================================================
 # AKS Backup Instance (per cluster)
 # Vault + Policy + Extension 모두 준비된 후 연결
@@ -140,10 +150,22 @@ resource "azurerm_data_protection_backup_instance_kubernetes_cluster" "aks" {
   snapshot_resource_group_name = var.cluster_rg_names[each.key]
   # kubernetes_cluster_extension_id: azurerm ~4.14 미지원 속성 — Extension 설치 후 자동 연결됨
 
+  backup_datasource_parameters {
+    # 모든 네임스페이스 포함 (excluded_namespaces로 제외 가능)
+    excluded_namespaces              = []
+    excluded_resource_types          = []
+    cluster_scoped_resources_enabled = true
+    included_namespaces              = []
+    included_resource_types          = []
+    label_selectors                  = []
+    volume_snapshot_enabled          = true
+  }
+
   depends_on = [
     azurerm_kubernetes_cluster_extension.backup,
     azurerm_role_assignment.vault_cluster_rg_contributor,
     azurerm_role_assignment.vault_storage_blob,
     azurerm_role_assignment.kubelet_snapshot_contributor,
+    azurerm_role_assignment.extension_snapshot_contributor,
   ]
 }
