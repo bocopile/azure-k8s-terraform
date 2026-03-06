@@ -33,8 +33,11 @@ resource "azurerm_key_vault" "kv" {
   soft_delete_retention_days = 90
   purge_protection_enabled   = var.purge_protection
 
-  # Private Endpoint 구성 후 공개 접근 차단 (ARCHITECTURE.md §5.6)
-  public_network_access_enabled = false
+  # public_network_access_enabled:
+  #   - allowed_ips 미설정(기본) → false: 완전 Private (PE 전용)
+  #   - allowed_ips 설정 시    → true:  방화벽으로 IP 제한 (Terraform 로컬 실행 등)
+  # Azure 제약: public_network_access_enabled=false 이면 ip_rules도 무시됨
+  public_network_access_enabled = length(var.allowed_ips) > 0 ? true : false
 
   network_acls {
     default_action = "Deny"

@@ -188,8 +188,10 @@ resource "azurerm_servicebus_namespace" "sb" {
   name                = var.servicebus_name
   location            = var.location
   resource_group_name = var.rg_common
-  sku                 = "Premium"
-  capacity            = var.servicebus_capacity
+  sku                  = "Premium"
+  capacity             = var.servicebus_capacity
+  # Premium SKU 필수 — 유효값: 1, 2, 4
+  premium_messaging_partitions = 1
 
   # Private Endpoint 구성 후 공개 접근 차단
   public_network_access_enabled = false
