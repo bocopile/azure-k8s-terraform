@@ -73,4 +73,109 @@ spec:
           averageUtilization: 80
 EOF
 
+# ---- ClusterIssuer — Let's Encrypt (DNS-01 / Azure DNS) ----
+# 필수 환경변수:
+#   LETSENCRYPT_EMAIL       : 인증서 만료 알림 수신 이메일 (필수)
+#   AZURE_SUBSCRIPTION_ID   : DNS Zone이 위치한 구독 ID
+#   AZURE_TENANT_ID         : Azure AD Tenant ID
+#   DNS_ZONE_RG             : Azure DNS Zone 리소스 그룹
+#   DNS_ZONE_NAME           : Azure DNS Zone 이름 (예: example.com)
+#   CERT_MANAGER_CLIENT_ID  : cert-manager Workload Identity 클라이언트 ID
+#
+# DNS Zone이 없으면 HTTP-01 ClusterIssuer만 생성됩니다.
+
+: "${LETSENCRYPT_EMAIL:?LETSENCRYPT_EMAIL 환경변수를 설정하세요 (예: admin@example.com)}"
+: "${AZURE_SUBSCRIPTION_ID:?AZURE_SUBSCRIPTION_ID 환경변수를 설정하세요}"
+: "${AZURE_TENANT_ID:?AZURE_TENANT_ID 환경변수를 설정하세요}"
+
+echo "[cert-manager] Creating ClusterIssuer resources..."
+
+# cert-manager가 완전히 준비될 때까지 대기
+kubectl -n "${NAMESPACE}" wait --for=condition=Available deployment/cert-manager --timeout=120s
+
+if [[ -n "${DNS_ZONE_NAME:-}" && -n "${DNS_ZONE_RG:-}" && -n "${CERT_MANAGER_CLIENT_ID:-}" ]]; then
+  # DNS-01 ClusterIssuer (Workload Identity + Azure DNS)
+  cat <<EOF | kubectl apply -f -
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-staging
+spec:
+  acme:
+    server: https://acme-staging-v02.api.letsencrypt.org/directory
+    email: ${LETSENCRYPT_EMAIL}
+    privateKeySecretRef:
+      name: letsencrypt-staging-key
+    solvers:
+      - dns01:
+          azureDNS:
+            subscriptionID: ${AZURE_SUBSCRIPTION_ID}
+            resourceGroupName: ${DNS_ZONE_RG}
+            hostedZoneName: ${DNS_ZONE_NAME}
+            environment: AzurePublicCloud
+            managedIdentity:
+              clientID: ${CERT_MANAGER_CLIENT_ID}
+EOF
+
+  cat <<EOF | kubectl apply -f -
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-production
+spec:
+  acme:
+    server: https://acme-v02.api.letsencrypt.org/directory
+    email: ${LETSENCRYPT_EMAIL}
+    privateKeySecretRef:
+      name: letsencrypt-production-key
+    solvers:
+      - dns01:
+          azureDNS:
+            subscriptionID: ${AZURE_SUBSCRIPTION_ID}
+            resourceGroupName: ${DNS_ZONE_RG}
+            hostedZoneName: ${DNS_ZONE_NAME}
+            environment: AzurePublicCloud
+            managedIdentity:
+              clientID: ${CERT_MANAGER_CLIENT_ID}
+EOF
+  echo "[cert-manager] ✓ DNS-01 ClusterIssuer (staging + production) created"
+else
+  # HTTP-01 ClusterIssuer fallback (인터넷에서 접근 가능한 인그레스 필요)
+  echo "[cert-manager] DNS_ZONE_NAME / CERT_MANAGER_CLIENT_ID 미설정 — HTTP-01 ClusterIssuer 생성"
+  cat <<EOF | kubectl apply -f -
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-staging
+spec:
+  acme:
+    server: https://acme-staging-v02.api.letsencrypt.org/directory
+    email: ${LETSENCRYPT_EMAIL}
+    privateKeySecretRef:
+      name: letsencrypt-staging-key
+    solvers:
+      - http01:
+          ingress:
+            ingressClassName: nginx
+EOF
+
+  cat <<EOF | kubectl apply -f -
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-production
+spec:
+  acme:
+    server: https://acme-v02.api.letsencrypt.org/directory
+    email: ${LETSENCRYPT_EMAIL}
+    privateKeySecretRef:
+      name: letsencrypt-production-key
+    solvers:
+      - http01:
+          ingress:
+            ingressClassName: nginx
+EOF
+  echo "[cert-manager] ✓ HTTP-01 ClusterIssuer (staging + production) created"
+fi
+
 echo "[cert-manager] ✓ Installed ${CERT_MANAGER_VERSION} on ${CLUSTER} (HA + HPA)"
