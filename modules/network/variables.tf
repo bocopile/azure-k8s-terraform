@@ -35,6 +35,12 @@ variable "pe_subnet_cidr" {
   type        = string
 }
 
+variable "enable_private_cluster" {
+  description = "true = AKS Private Cluster용 Private DNS Zone 생성"
+  type        = bool
+  default     = false
+}
+
 variable "tags" {
   description = "Resource tags"
   type        = map(string)

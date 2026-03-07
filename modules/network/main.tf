@@ -291,17 +291,19 @@ locals {
 # ============================================================
 
 resource "azurerm_private_dns_zone" "aks" {
+  count = var.enable_private_cluster ? 1 : 0
+
   name                = "privatelink.${var.location}.azmk8s.io"
   resource_group_name = var.rg_common
   tags                = var.tags
 }
 
 resource "azurerm_private_dns_zone_virtual_network_link" "aks" {
-  for_each = var.vnets
+  for_each = var.enable_private_cluster ? var.vnets : {}
 
   name                  = "dnslink-aks-${each.key}"
   resource_group_name   = var.rg_common
-  private_dns_zone_name = azurerm_private_dns_zone.aks.name
+  private_dns_zone_name = azurerm_private_dns_zone.aks[0].name
   virtual_network_id    = azurerm_virtual_network.vnet[each.key].id
   registration_enabled  = false
   tags                  = var.tags
@@ -319,4 +321,7 @@ resource "azurerm_virtual_network_peering" "mesh" {
   allow_forwarded_traffic      = true
   allow_gateway_transit        = false
   use_remote_gateways          = false
+
+  # Subnet 생성이 완료된 후 Peering 시작 — race condition(400 ReferencedResourceNotProvisioned) 방지
+  depends_on = [azurerm_subnet.aks, azurerm_subnet.bastion, azurerm_subnet.jumpbox, azurerm_subnet.private_endpoint]
 }

@@ -19,9 +19,17 @@ resource "azurerm_kubernetes_cluster" "aks" {
   # AKS SKU Tier — Standard = 99.95% Control Plane SLA (ARCHITECTURE.md §4.2)
   sku_tier = var.aks_sku_tier
 
-  # Private cluster — API Server 공개 엔드포인트 없음 (ADR-021 / C15)
-  private_cluster_enabled = true
-  private_dns_zone_id     = var.aks_private_dns_zone_id
+  # Private cluster 또는 Authorized IP 모드 (enable_private_cluster 변수로 전환)
+  private_cluster_enabled = var.enable_private_cluster
+  private_dns_zone_id     = var.enable_private_cluster ? var.aks_private_dns_zone_id : null
+
+  # Authorized IP Ranges — enable_private_cluster = false 시 적용
+  dynamic "api_server_access_profile" {
+    for_each = !var.enable_private_cluster && length(var.api_server_authorized_ips) > 0 ? [1] : []
+    content {
+      authorized_ip_ranges = var.api_server_authorized_ips
+    }
+  }
 
   # Node OS 자동 업그레이드 (보안 패치)
   node_os_upgrade_channel = "NodeImage"
@@ -229,6 +237,8 @@ resource "azurerm_kubernetes_cluster_node_pool" "ingress" {
 # ============================================================
 
 resource "azurerm_public_ip" "bastion" {
+  count = var.enable_jumpbox ? 1 : 0
+
   name                = var.bastion_pip_name
   location            = var.location
   resource_group_name = lookup(var.rg_cluster, "mgmt", values(var.rg_cluster)[0])
@@ -239,6 +249,8 @@ resource "azurerm_public_ip" "bastion" {
 }
 
 resource "azurerm_bastion_host" "bastion" {
+  count = var.enable_jumpbox ? 1 : 0
+
   name                = var.bastion_name
   location            = var.location
   resource_group_name = lookup(var.rg_cluster, "mgmt", values(var.rg_cluster)[0])
@@ -248,7 +260,7 @@ resource "azurerm_bastion_host" "bastion" {
   ip_configuration {
     name                 = "ipconfig-bastion"
     subnet_id            = var.bastion_subnet_id
-    public_ip_address_id = azurerm_public_ip.bastion.id
+    public_ip_address_id = azurerm_public_ip.bastion[0].id
   }
 }
 
@@ -264,6 +276,8 @@ resource "azurerm_bastion_host" "bastion" {
 # ============================================================
 
 resource "azurerm_user_assigned_identity" "jumpbox_mi" {
+  count = var.enable_jumpbox ? 1 : 0
+
   name                = "mi-jumpbox"
   location            = var.location
   resource_group_name = lookup(var.rg_cluster, "mgmt", values(var.rg_cluster)[0])
@@ -271,6 +285,8 @@ resource "azurerm_user_assigned_identity" "jumpbox_mi" {
 }
 
 resource "azurerm_network_interface" "jumpbox" {
+  count = var.enable_jumpbox ? 1 : 0
+
   name                = var.jumpbox_nic_name
   location            = var.location
   resource_group_name = lookup(var.rg_cluster, "mgmt", values(var.rg_cluster)[0])
@@ -285,17 +301,19 @@ resource "azurerm_network_interface" "jumpbox" {
 }
 
 resource "azurerm_linux_virtual_machine" "jumpbox" {
+  count = var.enable_jumpbox ? 1 : 0
+
   name                = var.jumpbox_vm_name
   location            = var.location
   resource_group_name = lookup(var.rg_cluster, "mgmt", values(var.rg_cluster)[0])
   size                = var.vm_sizes["jumpbox"]
   admin_username      = var.jumpbox_admin_username
 
-  network_interface_ids = [azurerm_network_interface.jumpbox.id]
+  network_interface_ids = [azurerm_network_interface.jumpbox[0].id]
 
   identity {
     type         = "UserAssigned"
-    identity_ids = [azurerm_user_assigned_identity.jumpbox_mi.id]
+    identity_ids = [azurerm_user_assigned_identity.jumpbox_mi[0].id]
   }
 
   admin_ssh_key {
@@ -510,10 +528,10 @@ BASHRC
 # ============================================================
 
 resource "azurerm_role_assignment" "jumpbox_aks_admin" {
-  # var.clusters는 static keys(mgmt/app1/app2) — apply 전에도 keys 확정
-  for_each = var.clusters
+  # enable_jumpbox = false 시 미생성, static keys로 apply 전에도 keys 확정
+  for_each = var.enable_jumpbox ? var.clusters : {}
 
   scope                = azurerm_kubernetes_cluster.aks[each.key].id
   role_definition_name = "Azure Kubernetes Service RBAC Cluster Admin"
-  principal_id         = azurerm_user_assigned_identity.jumpbox_mi.principal_id
+  principal_id         = azurerm_user_assigned_identity.jumpbox_mi[0].principal_id
 }

@@ -91,9 +91,28 @@ variable "kubelet_object_ids" {
   type        = map(string)
 }
 
+variable "enable_private_cluster" {
+  description = "true = AKS Private Cluster, false = Public Endpoint + Authorized IPs"
+  type        = bool
+  default     = false
+}
+
+variable "enable_jumpbox" {
+  description = "true = Jumpbox VM + Azure Bastion 배포"
+  type        = bool
+  default     = false
+}
+
+variable "api_server_authorized_ips" {
+  description = "AKS API Server 접근 허용 IP 목록 (enable_private_cluster = false 시 적용)"
+  type        = list(string)
+  default     = []
+}
+
 variable "aks_private_dns_zone_id" {
-  description = "Shared Private DNS Zone ID for AKS Private Cluster (cross-VNet API Server resolution)"
+  description = "Shared Private DNS Zone ID for AKS Private Cluster (null when not private)"
   type        = string
+  default     = null
 }
 
 variable "log_analytics_workspace_id" {

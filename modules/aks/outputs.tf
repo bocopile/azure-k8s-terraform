@@ -20,26 +20,26 @@ output "oidc_issuer_urls" {
 }
 
 output "jumpbox_private_ip" {
-  description = "Jump VM private IP address"
-  value       = azurerm_network_interface.jumpbox.private_ip_address
+  description = "Jump VM private IP address (null when enable_jumpbox = false)"
+  value       = var.enable_jumpbox ? azurerm_network_interface.jumpbox[0].private_ip_address : null
 }
 
 output "bastion_dns_name" {
-  description = "Azure Bastion DNS name"
-  value       = azurerm_bastion_host.bastion.dns_name
+  description = "Azure Bastion DNS name (null when enable_jumpbox = false)"
+  value       = var.enable_jumpbox ? azurerm_bastion_host.bastion[0].dns_name : null
 }
 
 output "bastion_host_name" {
-  description = "Azure Bastion host name"
-  value       = azurerm_bastion_host.bastion.name
+  description = "Azure Bastion host name (null when enable_jumpbox = false)"
+  value       = var.enable_jumpbox ? azurerm_bastion_host.bastion[0].name : null
 }
 
 output "jumpbox_vm_name" {
-  description = "Jump VM name"
-  value       = azurerm_linux_virtual_machine.jumpbox.name
+  description = "Jump VM name (null when enable_jumpbox = false)"
+  value       = var.enable_jumpbox ? azurerm_linux_virtual_machine.jumpbox[0].name : null
 }
 
 output "jumpbox_identity_principal_id" {
-  description = "Jump VM User-Assigned Managed Identity principal ID"
-  value       = azurerm_user_assigned_identity.jumpbox_mi.principal_id
+  description = "Jump VM User-Assigned Managed Identity principal ID (null when enable_jumpbox = false)"
+  value       = var.enable_jumpbox ? azurerm_user_assigned_identity.jumpbox_mi[0].principal_id : null
 }

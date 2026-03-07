@@ -51,6 +51,34 @@ variable "dns_zone_id" {
   default     = ""
 }
 
+variable "enable_private_cluster" {
+  description = <<-EOT
+    true  = AKS Private Cluster (API Server VNet 내부 전용 — Jumpbox/VPN 필요)
+    false = AKS Public Endpoint + Authorized IP 방화벽 (로컬 kubectl 직접 접근 가능)
+  EOT
+  type        = bool
+  default     = false
+}
+
+variable "api_server_authorized_ips" {
+  description = <<-EOT
+    AKS API Server 접근 허용 IP 목록 (enable_private_cluster = false 시 적용).
+    로컬 공인 IP 확인: curl -s ifconfig.me
+    예: ["1.2.3.4/32", "5.6.7.8/32"]
+  EOT
+  type        = list(string)
+  default     = []
+}
+
+variable "enable_jumpbox" {
+  description = <<-EOT
+    true  = Jumpbox VM + Azure Bastion 배포 (Private Cluster 접근용)
+    false = Jumpbox/Bastion 미배포 (Authorized IP로 로컬 kubectl 직접 접근)
+  EOT
+  type        = bool
+  default     = false
+}
+
 variable "enable_grafana" {
   description = "Enable Azure Managed Grafana for Prometheus visualization"
   type        = bool

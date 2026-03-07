@@ -34,6 +34,6 @@ output "nsg_aks_ids" {
 }
 
 output "aks_private_dns_zone_id" {
-  description = "AKS Private Cluster shared DNS Zone ID"
-  value       = azurerm_private_dns_zone.aks.id
+  description = "AKS Private Cluster shared DNS Zone ID (null when enable_private_cluster = false)"
+  value       = var.enable_private_cluster ? azurerm_private_dns_zone.aks[0].id : null
 }

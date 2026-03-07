@@ -55,14 +55,11 @@ provider "azuread" {
 # ============================================================
 
 # ============================================================
-# Azure Resource Provider 자동 등록
-# AKS Backup Extension은 Microsoft.KubernetesConfiguration 필수
-# tofu apply 한 번에 모든 인프라 배포 가능하도록 사전 등록
+# Azure Resource Provider 사전 등록 필요 (pre-apply-check.sh에서 자동 확인)
+# az provider register --namespace Microsoft.KubernetesConfiguration
+# azurerm_resource_provider_registration은 azurerm 4.x provider 버그로 미사용
+# (destroy 후 재apply 시 "root object was present, but now absent" 오류 발생)
 # ============================================================
-
-resource "azurerm_resource_provider_registration" "kubernetes_config" {
-  name = "Microsoft.KubernetesConfiguration"
-}
 
 module "resource_group" {
   source = "./modules/resource-group"
@@ -80,10 +77,11 @@ module "network" {
   rg_common           = local.rg_common
   vnets               = local.vnets
   aks_subnets         = local.aks_subnets
-  bastion_subnet_cidr = local.bastion_subnet_cidr
-  jumpbox_subnet_cidr = local.jumpbox_subnet_cidr
-  pe_subnet_cidr      = local.pe_subnet_cidr
-  tags                = var.tags
+  bastion_subnet_cidr    = local.bastion_subnet_cidr
+  jumpbox_subnet_cidr    = local.jumpbox_subnet_cidr
+  pe_subnet_cidr         = local.pe_subnet_cidr
+  enable_private_cluster = var.enable_private_cluster
+  tags                   = var.tags
 
   depends_on = [module.resource_group]
 }
@@ -119,7 +117,7 @@ module "acr" {
   enable_diagnostics         = true
   enable_private_endpoint    = var.acr_enable_private_endpoint
   pe_subnet_id               = module.network.pe_subnet_id
-  vnet_ids                   = module.network.vnet_ids
+  vnet_ids                   = { for k in keys(local.vnets) : k => module.network.vnet_ids[k] }
   tags                       = var.tags
 
   depends_on = [module.resource_group, module.network, module.monitoring]
@@ -133,10 +131,10 @@ module "identity" {
   rg_common                  = local.rg_common
   clusters                   = local.clusters
   acr_id                     = module.acr.acr_id
-  vnet_ids                   = module.network.vnet_ids
+  vnet_ids                   = { for k in keys(local.vnets) : k => module.network.vnet_ids[k] }
   key_vault_id               = module.keyvault.key_vault_id
   aks_private_dns_zone_id    = module.network.aks_private_dns_zone_id
-  enable_dns_role_assignment = true
+  enable_dns_role_assignment = var.enable_private_cluster
   dns_zone_id                = var.dns_zone_id
   tags                       = var.tags
 
@@ -160,7 +158,7 @@ module "monitoring" {
   grafana_sku              = var.grafana_sku
   grafana_admin_object_ids = var.grafana_admin_object_ids
   pe_subnet_id             = module.network.pe_subnet_id
-  vnet_ids                 = module.network.vnet_ids
+  vnet_ids                 = { for k in keys(local.vnets) : k => module.network.vnet_ids[k] }
   tags                     = var.tags
 
   depends_on = [module.resource_group, module.network]
@@ -180,14 +178,15 @@ module "backup" {
   backup_storage_account_name = local.names.backup_storage
   subscription_id             = var.subscription_id
   tenant_id                   = var.tenant_id
-  cluster_ids                 = module.aks.cluster_ids
-  cluster_rg_names            = local.rg_cluster
-  cluster_rg_ids              = module.resource_group.cluster_resource_group_ids
-  kubelet_object_ids          = module.identity.kubelet_object_ids
+  # static keys로 명시 — for_each 시 apply 전에도 keys 확정 가능
+  cluster_ids        = { for k in keys(local.clusters) : k => module.aks.cluster_ids[k] }
+  cluster_rg_names   = local.rg_cluster
+  cluster_rg_ids     = { for k in keys(local.clusters) : k => module.resource_group.cluster_resource_group_ids[k] }
+  kubelet_object_ids = { for k in keys(local.clusters) : k => module.identity.kubelet_object_ids[k] }
 
   tags = var.tags
 
-  depends_on = [module.resource_group, module.aks, module.identity, azurerm_resource_provider_registration.kubernetes_config]
+  depends_on = [module.resource_group, module.aks, module.identity]
 }
 
 # ============================================================
@@ -206,7 +205,10 @@ resource "azurerm_key_vault_secret" "flux_ssh_key" {
 }
 
 # jumpbox MSI → Key Vault: 시크릿 조회 권한 (flux-ssh-private-key 등)
+# enable_jumpbox = false 시 미생성
 resource "azurerm_role_assignment" "jumpbox_kv_secrets_user" {
+  count = var.enable_jumpbox ? 1 : 0
+
   scope                = module.keyvault.key_vault_id
   role_definition_name = "Key Vault Secrets User"
   principal_id         = module.aks.jumpbox_identity_principal_id
@@ -227,6 +229,10 @@ module "aks" {
   clusters_with_ingress = local.clusters_with_ingress
   rg_cluster            = local.rg_cluster
   rg_common             = local.rg_common
+
+  enable_private_cluster    = var.enable_private_cluster
+  enable_jumpbox            = var.enable_jumpbox
+  api_server_authorized_ips = var.api_server_authorized_ips
 
   subnet_ids              = module.network.aks_subnet_ids
   bastion_subnet_id       = module.network.bastion_subnet_id
@@ -272,7 +278,7 @@ module "data_services" {
   location     = local.location
   rg_common    = local.rg_common
   pe_subnet_id = module.network.pe_subnet_id
-  vnet_ids     = module.network.vnet_ids
+  vnet_ids     = { for k in keys(local.vnets) : k => module.network.vnet_ids[k] }
   key_vault_id = module.keyvault.key_vault_id
 
   log_analytics_workspace_id = module.monitoring.log_analytics_workspace_id
