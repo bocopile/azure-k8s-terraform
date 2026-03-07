@@ -59,7 +59,6 @@ if ! az storage account show --name "${SA_NAME}" --resource-group "${RG_NAME}" &
     --location "${LOCATION}" \
     --sku Standard_LRS \
     --allow-blob-public-access false \
-    --min-tls-version TLS1_2 \
     -o none
   az storage container create \
     --name "${CONTAINER}" \

@@ -140,6 +140,13 @@ resource "azurerm_monitor_diagnostic_setting" "activity_log" {
   enabled_log { category = "ResourceHealth" }
   enabled_log { category = "Recommendation" }
   enabled_log { category = "ServiceHealth" }
+
+  timeouts {
+    create = "10m"
+    update = "10m"
+    delete = "5m"
+    read   = "5m"
+  }
 }
 
 # ============================================================

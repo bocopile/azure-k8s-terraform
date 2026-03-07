@@ -34,6 +34,13 @@ resource "azurerm_monitor_diagnostic_setting" "acr" {
   enabled_metric {
     category = "AllMetrics"
   }
+
+  timeouts {
+    create = "10m"
+    update = "10m"
+    delete = "5m"
+    read   = "5m"
+  }
 }
 
 # ============================================================

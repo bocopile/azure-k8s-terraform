@@ -29,6 +29,7 @@ generated/*
 *.log
 *.out
 *.err
+logs/
 
 # Shell script cache/output
 shell/*.log

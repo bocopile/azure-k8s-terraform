@@ -31,4 +31,11 @@ resource "azurerm_monitor_diagnostic_setting" "aks" {
 
   # 메트릭
   enabled_metric { category = "AllMetrics" }
+
+  timeouts {
+    create = "10m"
+    update = "10m"
+    delete = "5m"
+    read   = "5m"
+  }
 }

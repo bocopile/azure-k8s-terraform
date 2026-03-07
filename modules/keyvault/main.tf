@@ -123,4 +123,11 @@ resource "azurerm_monitor_diagnostic_setting" "kv" {
   enabled_log { category = "AzurePolicyEvaluationDetails" }
 
   enabled_metric { category = "AllMetrics" }
+
+  timeouts {
+    create = "10m"
+    update = "10m"
+    delete = "5m"
+    read   = "5m"
+  }
 }
