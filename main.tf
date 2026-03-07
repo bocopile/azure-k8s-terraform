@@ -99,7 +99,8 @@ module "keyvault" {
   purge_protection           = var.keyvault_purge_protection
   allowed_ips                = var.kv_allowed_ips
   pe_subnet_id               = module.network.pe_subnet_id
-  vnet_ids                   = module.network.vnet_ids
+  # for_each 키가 apply 전에 알려야 하므로 static keys로 명시 구성 (local.vnets 기반)
+  vnet_ids                   = { for k in keys(local.vnets) : k => module.network.vnet_ids[k] }
   log_analytics_workspace_id = module.monitoring.log_analytics_workspace_id
   enable_diagnostics         = true
   tags                       = var.tags
