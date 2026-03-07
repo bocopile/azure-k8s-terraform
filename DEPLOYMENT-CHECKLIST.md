@@ -123,8 +123,8 @@ tofu apply tfplan
 | Network / RG / Monitoring | 3-5분 |
 | AKS 클러스터 3개 | 10-15분 |
 | Backup Extension 설치 | 5-7분 |
-| jumpbox CustomScript (cloud-init 대기) | 15-25분 |
-| **전체** | **약 35-50분** |
+| jumpbox cloud-init (az CLI + kubectl + addon 통합) | 10-15분 |
+| **전체** | **약 28-42분** |
 
 ### 자주 발생하는 오류와 조치
 
@@ -132,8 +132,7 @@ tofu apply tfplan
 |------|------|------|
 | KV 403 `ForbiddenByConnection` | `kv_allowed_ips` 미설정 | terraform.tfvars에 IP 추가 |
 | ServiceBus 409 `MissingSubscriptionRegistration` | Microsoft.KubernetesConfiguration 미등록 | `az provider register --namespace Microsoft.KubernetesConfiguration --wait` |
-| jumpbox extension `context deadline exceeded` | CustomScript 30분 초과 | `tofu import module.aks.azurerm_virtual_machine_extension.jumpbox_addon <id>` 후 재apply |
-| Extension `already exists` | 이전 apply 부분 성공 | `tofu import` 로 state에 추가 |
+| jumpbox cloud-init 실패 | apt lock 충돌 또는 MSI 전파 지연 | VM 재부팅 또는 `/var/log/jumpvm-init.log` 확인 |
 | State Lock | 이전 apply 중단 | `tofu force-unlock -force <LOCK_ID>` |
 
 ---

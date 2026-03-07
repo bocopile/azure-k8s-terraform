@@ -19,7 +19,7 @@
 
 ### P1–P4
 - [x] P1. Remote Backend — Azure Blob Storage (`backend.tf`)
-- [x] P2. Jump VM System-Assigned MI + RBAC + CustomScript Extension
+- [x] P2. Jump VM User-Assigned MI + RBAC + cloud-init 통합 (az CLI + kubectl + addon 설치)
 - [x] P3. Network Watcher 네이밍 개선 (`nw-koreacentral` → `nw-k8s`)
 - [x] P4. AKS 노드 OS → Azure Linux (`os_sku = "AzureLinux"`)
 

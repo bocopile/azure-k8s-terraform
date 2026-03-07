@@ -377,7 +377,7 @@ EOF
 > `LETSENCRYPT_EMAIL`이 없어 cert-manager ClusterIssuer 생성이 실패합니다.
 > Flux를 사용하지 않는다면 `flux_ssh_private_key`와 `GITOPS_REPO_URL`은 생략 가능합니다.
 
-> **addon_repo_url을 비워두면** CustomScript Extension이 실행되지 않고
+> **addon_repo_url을 비워두면** cloud-init에서 addon 설치 단계를 건너뛰고
 > Jump VM만 준비됩니다. 이후 수동으로 Bastion → Jump VM 접속 후 `install.sh`를 실행할 수 있습니다.
 
 ### 2. AKS 버전 확인
@@ -672,17 +672,18 @@ tofu apply -target=module.backup
 tofu apply
   ├── 인프라 생성 (AKS 3개, Key Vault, Backup 등)
   ├── flux-ssh-private-key → Key Vault secret 저장
-  └── CustomScript Extension (Jump VM에서 백그라운드 실행)
-        ① addon_env 환경변수 export
-        ② Key Vault에서 Flux SSH key 조회
-        ③ addon_repo_url 레포 클론
-        └── install.sh --cluster all 자동 실행
+  └── Jump VM cloud-init (VM 부팅 시 자동 실행)
+        ① az CLI + kubectl + kubelogin + helm 등 도구 병렬 설치
+        ② MSI 인증 → 3개 클러스터 kubeconfig 자동 취득
+        ③ Key Vault에서 Flux SSH key 조회
+        ④ addon_repo_url 레포 클론
+        └── install.sh --prefix <prefix> --location <location> 자동 실행
 ```
 
 설치 로그 확인 (Jump VM 접속 후):
 ```bash
 # Azure Portal → vm-jumpbox → Bastion 접속 후
-tail -f /var/log/jumpvm-addon.log
+tail -f /var/log/jumpvm-init.log
 ```
 
 ### 수동 설치 (addon_repo_url 미설정 시)
