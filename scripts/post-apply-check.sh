@@ -95,8 +95,9 @@ for cluster in "${CLUSTERS[@]}"; do
     continue
   fi
 
-  echo "${POOLS}" | python3 -c "
-import sys, json
+  echo "${POOLS}" | CLUSTER="${cluster}" python3 -c "
+import sys, json, os
+cluster = os.environ['CLUSTER']
 pools = json.load(sys.stdin)
 for p in pools:
     state = p.get('state','?')
@@ -105,30 +106,34 @@ for p in pools:
     cnt   = p.get('count', 0)
     spot  = ' [Spot]' if prio == 'Spot' else ''
     tag   = '[OK]  ' if state == 'Succeeded' else '[WARN]'
-    print(f'  {tag} ${cluster}/{name}: {state}, {cnt}노드{spot}')
+    print(f'  {tag} {cluster}/{name}: {state}, {cnt}노드{spot}')
 " 2>/dev/null || log_warn "${CLUSTER_NAME}: 노드풀 상세 파싱 실패"
 done
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 section "3. VNet 피어링 (풀메시 mgmt↔app1↔app2)"
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-declare -A VNET_NAMES=([mgmt]="vnet-mgmt" [app1]="vnet-app1" [app2]="vnet-app2")
 PEERING_FAIL=0
 
 for vnet_key in mgmt app1 app2; do
-  VNET="${VNET_NAMES[$vnet_key]}"
+  case "${vnet_key}" in
+    mgmt) VNET="vnet-mgmt" ;;
+    app1) VNET="vnet-app1" ;;
+    app2) VNET="vnet-app2" ;;
+  esac
   PEERINGS=$(az network vnet peering list -g "${RG_COMMON}" --vnet-name "${VNET}" \
     --query "[].{name:name, state:peeringState}" -o json 2>/dev/null || echo "[]")
 
-  echo "${PEERINGS}" | python3 -c "
-import sys, json
+  echo "${PEERINGS}" | VNET_KEY="${vnet_key}" python3 -c "
+import sys, json, os
+vnet_key = os.environ['VNET_KEY']
 peers = json.load(sys.stdin)
 for p in peers:
     state = p.get('state','?')
     name  = p.get('name','?')
     ok    = state == 'Connected'
     tag   = '[OK]  ' if ok else '[WARN]'
-    print(f'  {tag} ${vnet_key}/{name}: {state}')
+    print(f'  {tag} {vnet_key}/{name}: {state}')
 " 2>/dev/null || { log_warn "${VNET}: 피어링 조회 실패"; PEERING_FAIL=$((PEERING_FAIL+1)); }
 done
 
@@ -148,14 +153,15 @@ for zone in "${DNS_ZONES[@]}"; do
   if [[ "${LINK_COUNT}" == "0" ]]; then
     log_warn "DNS Zone ${zone}: VNet 링크 없음 (Private Endpoint 미활성화이면 정상)"
   else
-    echo "${LINKS}" | python3 -c "
-import sys, json
+    echo "${LINKS}" | ZONE="${zone}" python3 -c "
+import sys, json, os
+zone = os.environ['ZONE']
 links = json.load(sys.stdin)
 ok = all(l.get('state') == 'Completed' for l in links)
 count = len(links)
 tag = '[OK]  ' if ok else '[WARN]'
 states = ', '.join(set(l.get('state','?') for l in links))
-print(f'  {tag} ${zone}: {count}개 링크 ({states})')
+print(f'  {tag} {zone}: {count}개 링크 ({states})')
 " 2>/dev/null
   fi
 done
@@ -240,12 +246,18 @@ for cluster in "${CLUSTERS[@]}"; do
   CLUSTER_NAME="aks-${cluster}"
 
   echo -e "  ${DIM}--- ${CLUSTER_NAME} ---${NC}"
+  _INVOKE_ERR=$(mktemp)
   RESULT=$(az aks command invoke -g "${RG}" -n "${CLUSTER_NAME}" \
     --command "kubectl get nodes --no-headers 2>/dev/null" \
-    --query "logs" -o tsv 2>/dev/null || echo "INVOKE_FAILED")
+    --query "logs" -o tsv 2>"${_INVOKE_ERR}" || true)
+  _ERR_MSG=$(cat "${_INVOKE_ERR}"); rm -f "${_INVOKE_ERR}"
 
-  if [[ "${RESULT}" == "INVOKE_FAILED" || -z "${RESULT}" ]]; then
-    log_warn "${CLUSTER_NAME}: command invoke 실패 (클러스터 미생성 또는 권한 없음)"
+  if [[ -z "$(echo "${RESULT}" | tr -d '[:space:]')" ]]; then
+    if echo "${_ERR_MSG}" | grep -q "KubernetesPerformanceError\|Insufficient resources"; then
+      log_warn "${CLUSTER_NAME}: command invoke 실패 — 시스템 노드 CPU 부족 (system_node_count 증가 필요)"
+    else
+      log_warn "${CLUSTER_NAME}: command invoke 실패 (클러스터 미생성 또는 권한 없음)"
+    fi
     continue
   fi
 
@@ -270,11 +282,15 @@ for cluster in "${CLUSTERS[@]}"; do
   RG="rg-${PREFIX}-${cluster}"
   CLUSTER_NAME="aks-${cluster}"
 
+  _INVOKE_ERR=$(mktemp)
   RESULT=$(az aks command invoke -g "${RG}" -n "${CLUSTER_NAME}" \
     --command "kubectl get pods -n kube-system --no-headers 2>/dev/null | grep -vE 'Running|Completed|Succeeded'" \
-    --query "logs" -o tsv 2>/dev/null || echo "INVOKE_FAILED")
+    --query "logs" -o tsv 2>"${_INVOKE_ERR}" || true)
+  _ERR_MSG=$(cat "${_INVOKE_ERR}"); rm -f "${_INVOKE_ERR}"
 
-  if [[ "${RESULT}" == "INVOKE_FAILED" ]]; then
+  if [[ -z "${RESULT}" ]] && echo "${_ERR_MSG}" | grep -q "KubernetesPerformanceError\|Insufficient resources"; then
+    log_warn "${CLUSTER_NAME}/kube-system: 조회 실패 — 시스템 노드 CPU 부족"
+  elif [[ -z "${RESULT}" ]] && echo "${_ERR_MSG}" | grep -q "ERROR\|Error\|error"; then
     log_warn "${CLUSTER_NAME}/kube-system: 조회 실패"
   elif [[ -z "$(echo "${RESULT}" | tr -d '[:space:]')" ]]; then
     log_ok "${CLUSTER_NAME}/kube-system: 모든 Pod 정상"
@@ -354,18 +370,16 @@ section "11. 클러스터 간 네트워크 통신"
 # VNet 피어링 Connected 확인은 위(섹션3)에서 완료.
 # 여기서는 Pod → 다른 클러스터 VNet IP 도달 가능 여부 검사 (DNS + ICMP)
 
-# app1 클러스터에서 mgmt VNet (10.1.0.0/16) 쪽 DNS 서버 도달 테스트
-CROSS_CHECK_CMD="kubectl run cross-check --image=busybox:1.36 --rm -it --restart=Never \
-  --timeout=15s -- sh -c 'nslookup kubernetes.default.svc.cluster.local && \
-  wget -q --spider --timeout=5 http://10.1.0.1 2>&1 | head -3; \
-  echo cross-check-done' 2>/dev/null || echo cross-check-failed"
+# system 노드풀 taint(CriticalAddonsOnly)를 허용하는 overrides JSON
+_TOLERATION_JSON='{"spec":{"tolerations":[{"key":"CriticalAddonsOnly","operator":"Exists"}]}}'
 
 for cluster in "app1" "app2"; do
   RG="rg-${PREFIX}-${cluster}"
   RESULT=$(az aks command invoke -g "${RG}" -n "aks-${cluster}" \
     --command "kubectl run cross-net-test --image=alpine:3.19 --rm --restart=Never \
-      --timeout=20s -- sh -c 'nslookup kubernetes.default && echo net-ok' 2>/dev/null \
-      | tail -3" \
+      --timeout=30s \
+      --overrides='${_TOLERATION_JSON}' \
+      -- sh -c 'nslookup kubernetes.default && echo net-ok' 2>/dev/null | tail -3" \
     --query "logs" -o tsv 2>/dev/null || echo "FAILED")
 
   if echo "${RESULT}" | grep -q "net-ok"; then
@@ -375,19 +389,35 @@ for cluster in "app1" "app2"; do
   fi
 done
 
-# VNet 간 실제 IP 도달 — mgmt에서 app1 AKS 서브넷 첫 번째 노드 IP에 ping
-MGMT_TO_APP1=$(az aks command invoke \
-  -g "rg-${PREFIX}-mgmt" -n "aks-mgmt" \
-  --command "kubectl run ping-test --image=alpine:3.19 --rm --restart=Never \
-    --timeout=20s -- sh -c 'ping -c 2 -W 3 10.2.0.4 2>&1 | tail -2 && echo ping-ok' 2>/dev/null \
-    | tail -3" \
-  --query "logs" -o tsv 2>/dev/null || echo "FAILED")
+# VNet 간 실제 IP 도달 — mgmt에서 app1 첫 번째 system 노드 IP에 ping
+# Azure API로 동적 조회 (하드코딩 IP 사용 안 함)
+_APP1_NRGROUP=$(az aks show -g "rg-${PREFIX}-app1" -n "aks-app1" \
+  --query "nodeResourceGroup" -o tsv 2>/dev/null || echo "")
+_APP1_NODE_IP=""
+if [[ -n "${_APP1_NRGROUP}" ]]; then
+  _APP1_NODE_IP=$(az network nic list -g "${_APP1_NRGROUP}" \
+    --query "[?contains(name,'system')].ipConfigurations[0].privateIPAddress | [0]" \
+    -o tsv 2>/dev/null | tr -d '[:space:]')
+fi
 
-if echo "${MGMT_TO_APP1}" | grep -q "ping-ok"; then
-  log_ok "mgmt → app1 VNet(10.2.x.x) 도달 가능 (VNet 피어링 정상)"
+if [[ -z "${_APP1_NODE_IP}" ]]; then
+  log_warn "mgmt → app1 VNet ping: app1 노드 IP 조회 실패 (MC_ RG 권한 확인)"
 else
-  log_warn "mgmt → app1 VNet ping 실패 (피어링 미연결 또는 NSG 차단 가능성)"
-  log_info "  → az network vnet peering list -g ${RG_COMMON} --vnet-name vnet-mgmt 확인"
+  MGMT_TO_APP1=$(az aks command invoke \
+    -g "rg-${PREFIX}-mgmt" -n "aks-mgmt" \
+    --command "kubectl run ping-test --image=alpine:3.19 --rm --restart=Never \
+      --timeout=20s \
+      --overrides='${_TOLERATION_JSON}' \
+      -- sh -c 'ping -c 2 -W 3 ${_APP1_NODE_IP} 2>&1 | tail -2 && echo ping-ok' 2>/dev/null \
+      | tail -3" \
+    --query "logs" -o tsv 2>/dev/null || echo "FAILED")
+
+  if echo "${MGMT_TO_APP1}" | grep -q "ping-ok"; then
+    log_ok "mgmt → app1 VNet(${_APP1_NODE_IP}) 도달 가능 (VNet 피어링 정상)"
+  else
+    log_warn "mgmt → app1 VNet(${_APP1_NODE_IP}) ping 실패 (NSG ICMP 차단 가능성)"
+    log_info "  → az network vnet peering list -g ${RG_COMMON} --vnet-name vnet-mgmt 확인"
+  fi
 fi
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
