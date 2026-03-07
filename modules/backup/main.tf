@@ -134,8 +134,25 @@ resource "azurerm_role_assignment" "extension_snapshot_contributor" {
 }
 
 # ============================================================
+# Trusted Access Role Binding (per cluster)
+# Backup Vault MSI가 AKS 클러스터에 직접 접근하기 위해 필수.
+# 없으면 BackupInstance가 ProtectionError 상태로 남음.
+# ============================================================
+
+resource "azurerm_kubernetes_cluster_trusted_access_role_binding" "backup" {
+  for_each = var.cluster_ids
+
+  name                  = "tarb-backup-${each.key}"
+  kubernetes_cluster_id = each.value
+  roles                 = ["Microsoft.DataProtection/backupVaults/backup-operator"]
+  source_resource_id    = azurerm_data_protection_backup_vault.vault.id
+
+  depends_on = [azurerm_data_protection_backup_vault.vault]
+}
+
+# ============================================================
 # AKS Backup Instance (per cluster)
-# Vault + Policy + Extension 모두 준비된 후 연결
+# Vault + Policy + Extension + Trusted Access 모두 준비된 후 연결
 # ============================================================
 
 resource "azurerm_data_protection_backup_instance_kubernetes_cluster" "aks" {
@@ -163,6 +180,7 @@ resource "azurerm_data_protection_backup_instance_kubernetes_cluster" "aks" {
 
   depends_on = [
     azurerm_kubernetes_cluster_extension.backup,
+    azurerm_kubernetes_cluster_trusted_access_role_binding.backup,
     azurerm_role_assignment.vault_cluster_rg_contributor,
     azurerm_role_assignment.vault_storage_blob,
     azurerm_role_assignment.kubelet_snapshot_contributor,

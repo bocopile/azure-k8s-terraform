@@ -15,7 +15,7 @@
 #   06  flux              — GitOps Flux v2 (전체)
 #   07  kiali             — 서비스 메시 관찰성 (mgmt only)
 #   08  karpenter-nodepool— Karpenter NodePool CRD (전체)
-#   09  backup-extension  — AKS Backup Extension (전체)
+#   09  (skip)            — AKS Backup Extension은 Terraform(tofu apply)에서 관리
 #   10  defender          — Defender for Containers 검증 (전체)
 #   11  budget-alert      — $250/월 예산 알림
 #   12  aks-automation    — AKS Stop/Start 자동화
@@ -202,13 +202,9 @@ for cluster in mgmt app1 app2; do
   fi
 done
 
-# --- Step 09: AKS Backup Extension (전체) ---
-for cluster in mgmt app1 app2; do
-  if [[ "${CLUSTER_TARGET}" == "all" || "${CLUSTER_TARGET}" == "${cluster}" ]]; then
-    log "--- [09] Installing AKS Backup Extension on ${cluster} ---"
-    run "${SCRIPTS_DIR}/09-backup-extension.sh" "${cluster}"
-  fi
-done
+# --- Step 09: AKS Backup Extension ---
+# Terraform에서 azurerm_kubernetes_cluster_extension으로 관리됨 (tofu apply 시 자동 설치)
+# 별도 스크립트 불필요 — 09-backup-extension.sh 삭제됨
 
 # --- Step 10: Defender for Containers 검증 (전체) ---
 for cluster in mgmt app1 app2; do
