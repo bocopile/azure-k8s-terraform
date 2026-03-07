@@ -319,73 +319,172 @@ resource "azurerm_linux_virtual_machine" "jumpbox" {
     version   = var.jumpbox_image_version
   }
 
-  # Jump VM 초기화: az cli, kubectl, kubelogin, helm, k9s, kubent, istioctl
+  # Jump VM 초기화: az CLI + kubectl + addon 설치까지 cloud-init에서 통합
   # NOTE: pinned versions for reproducibility. Update periodically.
   # <<-EOF 로 heredoc 작성 시 closing EOF의 들여쓰기 기준으로 앞 공백이 제거됨.
   # closing EOF를 content와 동일한 4칸으로 맞춤 → shebang이 position 0에 위치
+  # ── cloud-init 역할 ───────────────────────────────────────────
+  # az CLI를 병렬 설치에 통합 + MSI 인증/kubeconfig/addon 설치까지 처리
+  # CustomScript Extension 제거로 tofu apply 시간 단축
   custom_data = base64encode(<<-EOF
     #!/bin/bash
-    set -e
+    set -euo pipefail
+    LOG=/var/log/jumpvm-init.log
+    exec >> "$LOG" 2>&1
+    echo "[$(date '+%Y-%m-%dT%H:%M:%S')] cloud-init 시작"
 
-    # Azure CLI (Microsoft apt repository)
-    apt-get update -qq
-    apt-get install -y -qq apt-transport-https curl gnupg lsb-release ca-certificates
-    mkdir -p /etc/apt/keyrings
-    curl -sLS https://packages.microsoft.com/keys/microsoft.asc \
-      | gpg --dearmor -o /etc/apt/keyrings/microsoft.gpg
-    echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/microsoft.gpg] \
-      https://packages.microsoft.com/repos/azure-cli/ $(lsb_release -cs) main" \
-      > /etc/apt/sources.list.d/azure-cli.list
-    apt-get update -qq
-    apt-get install -y azure-cli
+    # Ubuntu 초기 부팅 시 unattended-upgrades가 apt lock을 선점하는 경우 대기
+    echo "[$(date '+%Y-%m-%dT%H:%M:%S')] apt lock 해제 대기 중..."
+    while systemctl is-active --quiet apt-daily.service \
+          apt-daily-upgrade.service 2>/dev/null; do
+      sleep 10
+    done
 
-    # kubectl + kubelogin (via az cli — uses Microsoft CDN)
+    # 기본 패키지 (az CLI apt 레포 설정에 필요한 패키지 포함)
+    apt-get update -qq
+    apt-get install -y -qq --no-install-recommends \
+      curl ca-certificates git apt-transport-https gnupg lsb-release
+
+    # ── 바이너리 도구 병렬 설치 (az CLI 포함) ─────────────────────
+    install_azure_cli() {
+      mkdir -p /etc/apt/keyrings
+      curl -sLS https://packages.microsoft.com/keys/microsoft.asc \
+        | gpg --dearmor -o /etc/apt/keyrings/microsoft.gpg
+      echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/microsoft.gpg] \
+        https://packages.microsoft.com/repos/azure-cli/ $(lsb_release -cs) main" \
+        > /etc/apt/sources.list.d/azure-cli.list
+      apt-get update -qq
+      apt-get install -y --no-install-recommends azure-cli
+      echo "[$(date '+%Y-%m-%dT%H:%M:%S')] az CLI 설치 완료"
+    }
+
+    install_helm() {
+      HELM_VERSION="v3.20.0"
+      HELM_TAR="helm-$${HELM_VERSION}-linux-amd64.tar.gz"
+      curl -fsSL "https://get.helm.sh/$${HELM_TAR}" -o "/tmp/$${HELM_TAR}"
+      HELM_SHA256=$(curl -fsSL "https://get.helm.sh/$${HELM_TAR}.sha256sum" | awk '{print $1}')
+      echo "$${HELM_SHA256}  /tmp/$${HELM_TAR}" | sha256sum -c -
+      tar -xz --strip-components=1 -C /usr/local/bin linux-amd64/helm -f "/tmp/$${HELM_TAR}"
+      rm -f "/tmp/$${HELM_TAR}"
+    }
+
+    install_k9s() {
+      K9S_VERSION="v0.50.18"
+      K9S_TAR="k9s_Linux_amd64.tar.gz"
+      curl -fsSL "https://github.com/derailed/k9s/releases/download/$${K9S_VERSION}/$${K9S_TAR}" \
+        -o "/tmp/$${K9S_TAR}"
+      K9S_SHA256=$(curl -fsSL "https://github.com/derailed/k9s/releases/download/$${K9S_VERSION}/checksums.txt" \
+        | grep "$${K9S_TAR}" | awk '{print $1}')
+      echo "$${K9S_SHA256}  /tmp/$${K9S_TAR}" | sha256sum -c -
+      tar -xz -C /usr/local/bin k9s -f "/tmp/$${K9S_TAR}"
+      rm -f "/tmp/$${K9S_TAR}"
+    }
+
+    install_kubent() {
+      KUBENT_VERSION="0.7.3"
+      KUBENT_TAR="kubent-$${KUBENT_VERSION}-linux-amd64.tar.gz"
+      curl -fsSL "https://github.com/doitintl/kube-no-trouble/releases/download/$${KUBENT_VERSION}/$${KUBENT_TAR}" \
+        -o "/tmp/$${KUBENT_TAR}"
+      KUBENT_SHA256=$(curl -fsSL "https://github.com/doitintl/kube-no-trouble/releases/download/$${KUBENT_VERSION}/checksums.txt" \
+        | grep "$${KUBENT_TAR}" | awk '{print $1}')
+      echo "$${KUBENT_SHA256}  /tmp/$${KUBENT_TAR}" | sha256sum -c -
+      tar -xz -C /usr/local/bin -f "/tmp/$${KUBENT_TAR}"
+      rm -f "/tmp/$${KUBENT_TAR}"
+    }
+
+    install_istioctl() {
+      ISTIO_VERSION="1.28.0"
+      ISTIO_TAR="istio-$${ISTIO_VERSION}-linux-amd64.tar.gz"
+      curl -fsSL "https://github.com/istio/istio/releases/download/$${ISTIO_VERSION}/$${ISTIO_TAR}" \
+        -o "/tmp/$${ISTIO_TAR}"
+      ISTIO_SHA256=$(curl -fsSL "https://github.com/istio/istio/releases/download/$${ISTIO_VERSION}/$${ISTIO_TAR}.sha256" \
+        | awk '{print $1}')
+      echo "$${ISTIO_SHA256}  /tmp/$${ISTIO_TAR}" | sha256sum -c -
+      tar -xz -C /tmp -f "/tmp/$${ISTIO_TAR}" "istio-$${ISTIO_VERSION}/bin/istioctl"
+      mv "/tmp/istio-$${ISTIO_VERSION}/bin/istioctl" /usr/local/bin/istioctl
+      rm -rf "/tmp/$${ISTIO_TAR}" "/tmp/istio-$${ISTIO_VERSION}"
+    }
+
+    export -f install_azure_cli install_helm install_k9s install_kubent install_istioctl
+    PIDS=()
+    install_azure_cli & PIDS+=($!)
+    install_helm      & PIDS+=($!)
+    install_k9s       & PIDS+=($!)
+    install_kubent    & PIDS+=($!)
+    install_istioctl  & PIDS+=($!)
+    FAILED=0
+    for pid in "$${PIDS[@]}"; do wait "$$pid" || FAILED=$((FAILED+1)); done
+    if [[ $$FAILED -gt 0 ]]; then
+      echo "[$(date '+%Y-%m-%dT%H:%M:%S')] [ERROR] $${FAILED}개 도구 설치 실패 — /var/log/jumpvm-init.log 확인"
+      exit 1
+    fi
+    echo "[$(date '+%Y-%m-%dT%H:%M:%S')] 바이너리 도구 설치 완료"
+
+    # kubectl + kubelogin
     az aks install-cli --install-location /usr/local/bin/kubectl \
       --kubelogin-install-location /usr/local/bin/kubelogin || true
 
-    # ── Helm 3 (pinned version + SHA256 검증) ──────────────────────
-    HELM_VERSION="v3.20.0"
-    HELM_TAR="helm-$${HELM_VERSION}-linux-amd64.tar.gz"
-    curl -fsSL "https://get.helm.sh/$${HELM_TAR}" -o "/tmp/$${HELM_TAR}"
-    HELM_SHA256=$(curl -fsSL "https://get.helm.sh/$${HELM_TAR}.sha256sum" | awk '{print $1}')
-    echo "$${HELM_SHA256}  /tmp/$${HELM_TAR}" | sha256sum -c -
-    tar -xz --strip-components=1 -C /usr/local/bin linux-amd64/helm -f "/tmp/$${HELM_TAR}"
-    rm -f "/tmp/$${HELM_TAR}"
+    # User-Assigned Managed Identity로 로그인 (재시도 5회 — identity 전파 지연 대응)
+    echo "[$(date '+%Y-%m-%dT%H:%M:%S')] MSI 로그인 시도..."
+    for i in 1 2 3 4 5; do
+      az login --identity --allow-no-subscriptions && break
+      echo "[WARN] MSI 로그인 실패 ($i/5), 30초 후 재시도..."
+      sleep 30
+    done
+    az account set --subscription ${var.subscription_id}
 
-    # ── k9s (pinned version + SHA256 검증) ─────────────────────────
-    K9S_VERSION="v0.50.18"
-    K9S_TAR="k9s_Linux_amd64.tar.gz"
-    curl -fsSL "https://github.com/derailed/k9s/releases/download/$${K9S_VERSION}/$${K9S_TAR}" \
-      -o "/tmp/$${K9S_TAR}"
-    K9S_SHA256=$(curl -fsSL "https://github.com/derailed/k9s/releases/download/$${K9S_VERSION}/checksums.txt" \
-      | grep "$${K9S_TAR}" | awk '{print $1}')
-    echo "$${K9S_SHA256}  /tmp/$${K9S_TAR}" | sha256sum -c -
-    tar -xz -C /usr/local/bin k9s -f "/tmp/$${K9S_TAR}"
-    rm -f "/tmp/$${K9S_TAR}"
+    # ---- Terraform 자동 주입 환경변수 ----
+    %{if var.prometheus_query_endpoint != ""}
+    export PROMETHEUS_URL="${var.prometheus_query_endpoint}"
+    %{endif}
 
-    # ── kubent (pinned version + SHA256 검증) ──────────────────────
-    KUBENT_VERSION="0.7.3"
-    KUBENT_TAR="kubent-$${KUBENT_VERSION}-linux-amd64.tar.gz"
-    curl -fsSL "https://github.com/doitintl/kube-no-trouble/releases/download/$${KUBENT_VERSION}/$${KUBENT_TAR}" \
-      -o "/tmp/$${KUBENT_TAR}"
-    KUBENT_SHA256=$(curl -fsSL "https://github.com/doitintl/kube-no-trouble/releases/download/$${KUBENT_VERSION}/checksums.txt" \
-      | grep "$${KUBENT_TAR}" | awk '{print $1}')
-    echo "$${KUBENT_SHA256}  /tmp/$${KUBENT_TAR}" | sha256sum -c -
-    tar -xz -C /usr/local/bin -f "/tmp/$${KUBENT_TAR}"
-    rm -f "/tmp/$${KUBENT_TAR}"
+    # ---- addon_env 환경변수 주입 ----
+    %{for key, value in var.addon_env~}
+    export ${key}="${value}"
+    %{endfor~}
 
-    # ── istioctl (pinned version + SHA256 검증) ─────────────────────
-    # curl | sh 패턴 제거 — GitHub release 직접 다운로드 + 체크섬 검증
-    ISTIO_VERSION="1.28.0"
-    ISTIO_TAR="istio-$${ISTIO_VERSION}-linux-amd64.tar.gz"
-    curl -fsSL "https://github.com/istio/istio/releases/download/$${ISTIO_VERSION}/$${ISTIO_TAR}" \
-      -o "/tmp/$${ISTIO_TAR}"
-    ISTIO_SHA256=$(curl -fsSL "https://github.com/istio/istio/releases/download/$${ISTIO_VERSION}/$${ISTIO_TAR}.sha256" \
-      | awk '{print $1}')
-    echo "$${ISTIO_SHA256}  /tmp/$${ISTIO_TAR}" | sha256sum -c -
-    tar -xz -C /tmp -f "/tmp/$${ISTIO_TAR}" "istio-$${ISTIO_VERSION}/bin/istioctl"
-    mv "/tmp/istio-$${ISTIO_VERSION}/bin/istioctl" /usr/local/bin/istioctl
-    rm -rf "/tmp/$${ISTIO_TAR}" "/tmp/istio-$${ISTIO_VERSION}"
+    # ---- Flux SSH Deploy Key: Key Vault에서 조회 후 파일로 기록 ----
+    if [[ -n "${var.key_vault_name}" ]]; then
+      FLUX_KEY=$(az keyvault secret show \
+        --vault-name "${var.key_vault_name}" \
+        --name flux-ssh-private-key \
+        --query value -o tsv 2>/dev/null || echo "")
+      if [[ -n "$FLUX_KEY" ]]; then
+        mkdir -p /root/.ssh
+        printf '%s' "$FLUX_KEY" > /root/.ssh/flux-deploy-key
+        chmod 600 /root/.ssh/flux-deploy-key
+        export GITOPS_SSH_KEY_FILE=/root/.ssh/flux-deploy-key
+        echo "[$(date '+%Y-%m-%dT%H:%M:%S')] Flux SSH key loaded from Key Vault"
+      fi
+    fi
+
+    # AKS credentials 취득
+    export KUBECONFIG=/root/.kube/config
+    mkdir -p /root/.kube
+    %{for name, _ in var.clusters~}
+    az aks get-credentials \
+      --resource-group ${var.rg_cluster[name]} \
+      --name aks-${name} \
+      --overwrite-existing
+    %{endfor~}
+
+    chmod 600 /root/.kube/config
+    kubelogin convert-kubeconfig -l msi
+
+    # Addon 레포 클론 후 설치
+    if [[ -n "${var.addon_repo_url}" ]]; then
+      REPO_DIR="/opt/addon-repo"
+      rm -rf "$REPO_DIR"
+      git clone --depth 1 --branch "${var.addon_repo_branch}" \
+        "${var.addon_repo_url}" "$REPO_DIR"
+      cd "$REPO_DIR"
+      chmod +x addons/install.sh
+      ./addons/install.sh \
+        --prefix ${var.prefix} \
+        --location ${var.location}
+    else
+      echo "[$(date '+%Y-%m-%dT%H:%M:%S')] addon_repo_url 미설정 — 설치 건너뜀"
+    fi
 
     # ~/.bashrc 편의 설정 (var.clusters 기반 동적 생성)
     cat >> /home/${var.jumpbox_admin_username}/.bashrc <<'BASHRC'
@@ -397,6 +496,7 @@ alias kc-all='${join(" && ", [for name, _ in var.clusters : "kc-${name}"])}'
 export KUBECONFIG=$HOME/.kube/config
 BASHRC
 
+    echo "[$(date '+%Y-%m-%dT%H:%M:%S')] cloud-init 완료"
     echo "Jump VM init complete" > /tmp/jumpvm-init.done
     EOF
   )
@@ -410,121 +510,10 @@ BASHRC
 # ============================================================
 
 resource "azurerm_role_assignment" "jumpbox_aks_admin" {
-  for_each = azurerm_kubernetes_cluster.aks
+  # var.clusters는 static keys(mgmt/app1/app2) — apply 전에도 keys 확정
+  for_each = var.clusters
 
-  scope                = each.value.id
+  scope                = azurerm_kubernetes_cluster.aks[each.key].id
   role_definition_name = "Azure Kubernetes Service RBAC Cluster Admin"
   principal_id         = azurerm_user_assigned_identity.jumpbox_mi.principal_id
-}
-
-# ============================================================
-# P2: CustomScript Extension — Addon 자동 설치
-# cloud-init 완료 후 MSI 인증 → AKS credentials → install.sh 실행
-# ============================================================
-
-resource "azurerm_virtual_machine_extension" "jumpbox_addon" {
-  name                 = "addon-install"
-  virtual_machine_id   = azurerm_linux_virtual_machine.jumpbox.id
-  publisher            = "Microsoft.Azure.Extensions"
-  type                 = "CustomScript"
-  type_handler_version = "2.1"
-
-  protected_settings = jsonencode({
-    script = base64encode(<<-SCRIPT
-      #!/bin/bash
-      set -euo pipefail
-      LOG=/var/log/jumpvm-addon.log
-      exec > >(tee -a "$LOG") 2>&1
-
-      echo "[$(date '+%Y-%m-%dT%H:%M:%S')] addon-install: waiting for cloud-init (max 30min)..."
-      # cloud-init은 az cli, helm, kubectl 등 패키지 다운로드로 15~20분 소요
-      timeout 1800 bash -c 'until [ -f /tmp/jumpvm-init.done ]; do sleep 15; done' || {
-        echo "[$(date '+%Y-%m-%dT%H:%M:%S')] [WARN] cloud-init 대기 시간 초과 — 계속 진행"
-      }
-      echo "[$(date '+%Y-%m-%dT%H:%M:%S')] addon-install: cloud-init complete"
-
-      # User-Assigned Managed Identity로 로그인
-      az login --identity --allow-no-subscriptions
-      az account set --subscription ${var.subscription_id}
-
-      # ---- Terraform 자동 주입 환경변수 ----
-      # addon_env에 명시적 값이 없을 때 Terraform output으로 fallback
-      %{if var.prometheus_query_endpoint != ""}
-      export PROMETHEUS_URL="${var.prometheus_query_endpoint}"
-      %{endif}
-
-      # ---- addon_env 환경변수 주입 (terraform.tfvars에서 선언, 위 값 override) ----
-      %{for key, value in var.addon_env~}
-      export ${key}="${value}"
-      %{endfor~}
-
-      # ---- Flux SSH Deploy Key: Key Vault에서 조회 후 파일로 기록 ----
-      if [[ -n "${var.key_vault_name}" ]]; then
-        FLUX_KEY=$$(az keyvault secret show \
-          --vault-name "${var.key_vault_name}" \
-          --name flux-ssh-private-key \
-          --query value -o tsv 2>/dev/null || echo "")
-        if [[ -n "$$FLUX_KEY" ]]; then
-          mkdir -p /root/.ssh
-          printf '%s' "$$FLUX_KEY" > /root/.ssh/flux-deploy-key
-          chmod 600 /root/.ssh/flux-deploy-key
-          export GITOPS_SSH_KEY_FILE=/root/.ssh/flux-deploy-key
-          echo "[$(date '+%Y-%m-%dT%H:%M:%S')] Flux SSH key loaded from Key Vault"
-        fi
-      fi
-
-      # AKS credentials 취득 (MSI 접근)
-      export KUBECONFIG=/root/.kube/config
-      mkdir -p /root/.kube
-      %{for name, _ in var.clusters~}
-      az aks get-credentials \
-        --resource-group ${var.rg_cluster[name]} \
-        --name aks-${name} \
-        --overwrite-existing
-      %{endfor~}
-
-      chmod 600 /root/.kube/config
-      # kubelogin MSI 모드로 변환 (Azure RBAC + local_account_disabled 대응)
-      kubelogin convert-kubeconfig -l msi
-
-      # Addon 레포 클론 후 설치 (addon_repo_url 설정 시에만 실행)
-      if [[ -n "${var.addon_repo_url}" ]]; then
-        REPO_DIR="/opt/addon-repo"
-        rm -rf "$$REPO_DIR"
-        # --depth 1: shallow clone으로 속도 단축
-        # --branch: 배포 재현성 확보 (HEAD 최신 커밋 사용 방지)
-        git clone --depth 1 --branch "${var.addon_repo_branch}" \
-          "${var.addon_repo_url}" "$$REPO_DIR"
-        cd "$$REPO_DIR"
-        chmod +x addons/install.sh
-        ./addons/install.sh \
-          --prefix ${var.prefix} \
-          --location ${var.location}
-      else
-        echo "[$(date '+%Y-%m-%dT%H:%M:%S')] addon_repo_url 미설정 — 설치 건너뜀"
-      fi
-
-      echo "[$(date '+%Y-%m-%dT%H:%M:%S')] addon-install: complete"
-    SCRIPT
-    )
-  })
-
-  tags = var.tags
-
-  # script 내용이 변경돼도 재실행하지 않음 (cloud-init + addon 설치는 1회만 실행)
-  lifecycle {
-    ignore_changes = [protected_settings]
-  }
-
-  # provider timeout: CustomScript는 cloud-init(15~20분) + addon 설치 포함 최대 60분
-  timeouts {
-    create = "60m"
-    update = "60m"
-    delete = "15m"
-  }
-
-  depends_on = [
-    azurerm_kubernetes_cluster.aks,
-    azurerm_role_assignment.jumpbox_aks_admin,
-  ]
 }
