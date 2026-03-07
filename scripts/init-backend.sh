@@ -26,9 +26,9 @@ BACKEND_FILE="backend.tf"
 SA_NAME=$(grep 'storage_account_name' "${BACKEND_FILE}" | sed 's/.*= *"\(.*\)".*/\1/')
 RG_NAME=$(grep 'resource_group_name' "${BACKEND_FILE}" | sed 's/.*= *"\(.*\)".*/\1/')
 CONTAINER=$(grep 'container_name' "${BACKEND_FILE}" | sed 's/.*= *"\(.*\)".*/\1/')
-# backend.tf에서 location 파싱, 없으면 환경변수 또는 기본값 사용
-BACKEND_LOCATION=$(grep 'location' "${BACKEND_FILE}" | sed 's/.*= *"\(.*\)".*/\1/' | head -1)
-LOCATION="${BACKEND_LOCATION:-${LOCATION:-koreacentral}}"
+# backend.tf에서 location 파싱 (주석 제외), 없으면 환경변수 또는 기본값 사용
+BACKEND_LOCATION=$(grep -v '^[[:space:]]*#' "${BACKEND_FILE}" | grep 'location' | sed 's/.*= *"\(.*\)".*/\1/' | head -1 || true)
+LOCATION="${BACKEND_LOCATION:-koreacentral}"
 
 echo "============================================================"
 echo "  Backend 설정"
