@@ -1238,14 +1238,15 @@ resource "azurerm_data_protection_backup_vault" "bv" {
 
 | # | 스크립트 | 대상 | 버전 | 의존성 |
 |---|---------|------|------|--------|
+| **13** | `13-hubble.sh` | 전 클러스터 | Cilium ACNS (AKS 관리) | AKS 생성 ⚠️ **반드시 첫 번째**: ACNS가 Cilium agent 재시작 유발 — 이후 Pod CNI 오류 방지 |
 | 00 | `00-priority-classes.sh` | 전 클러스터 | — | kubeconfig |
 | 00b | `00b-gateway-api.sh` | 전 클러스터 | **v1.5.0** | priority-classes |
-| 01 | `01-cert-manager.sh` | mgmt only | **v1.19.x** + ClusterIssuer 자동 생성 | AKS 생성 (Workload Identity) |
-| 02 | `02-external-secrets.sh` | 전 클러스터 | **Helm 0.10.x** | Workload Identity |
-| 03 | `03-reloader.sh` | 전 클러스터 | **Helm 1.x** | 없음 (독립 설치) |
+| 01 | `01-cert-manager.sh` | mgmt only | **v1.19.4** + ClusterIssuer 자동 생성 | AKS 생성 (Workload Identity) |
+| 02 | `02-external-secrets.sh` | 전 클러스터 | **ESO v2.0.1** | Workload Identity |
+| 03 | `03-reloader.sh` | 전 클러스터 | **Reloader v2.2.8** | 없음 (독립 설치) |
 | 04 | `04-istio.sh` | mgmt + app1 | **asm-1-28** | cert-manager |
-| 04b | `04b-istio-mtls.sh` | mgmt + app1 | — | Istio 설치 완료 |
-| 05 | `05-kyverno.sh` | app1/app2 | **Helm chart v3.7.1 / App v1.16.x** | 없음 (독립 설치) |
+| 04b | `04b-istio-mtls.sh` | mgmt + app1 | — | Istio istiod Ready 확인 후 |
+| 05 | `05-kyverno.sh` | app1/app2 | **Helm chart v3.7.1** (ghcr.io 이미지) | 없음 (독립 설치) |
 | 06 | `06-flux.sh` | 전 클러스터 | AKS 자동 관리 + FluxConfig 자동 생성 | AKS 생성 |
 | 07 | `07-kiali.sh` | mgmt only | **v2.22.0** + Kiali CR 자동 생성 | Istio |
 | 08 | `08-karpenter-nodepool.sh` | 전 클러스터 | Karpenter v1.6.5-aks | NAP 활성화 |
@@ -1253,10 +1254,10 @@ resource "azurerm_data_protection_backup_vault" "bv" {
 | 10 | `10-defender.sh` | 전 클러스터 | AKS 자동 관리 | AKS 생성 |
 | 11 | `11-budget-alert.sh` | 구독 레벨 | — | 없음 |
 | 12 | `12-aks-automation.sh` | 구독 레벨 | — | 없음 |
-| 13 | `13-hubble.sh` | 전 클러스터 | Cilium 1.14.10 (AKS 관리) | AKS 생성 |
-| 15 | `15-tetragon.sh` | 전 클러스터 | **Tetragon v1.6.0** | Managed Cilium (충돌 경고 확인) |
-| 16 | `16-otel-collector.sh` | 전 클러스터 | **OTel Collector v0.116.0** | App Insights |
-| 19 | `19-vpa.sh` | 전 클러스터 | **VPA v4.7.1 (Fairwinds)** | 없음 (독립 설치) |
+| 15 | `15-tetragon.sh` | 전 클러스터 | **Tetragon v1.6.0** | Managed Cilium (충돌 경고 확인, `TETRAGON_FORCE=true` 필요) |
+| 16 | `16-otel-collector.sh` | 전 클러스터 | **OTel Collector v0.146.1** | App Insights |
+| 17 | `17-grafana-dashboards.sh` | 구독 레벨 | — | Azure Managed Grafana 생성 시 |
+| 19 | `19-vpa.sh` | 전 클러스터 | **VPA v4.10.1 (Fairwinds)** | 없음 (독립 설치) |
 | 14 | `14-verify-clusters.sh` | 검증 | — | 전체 완료 (항상 마지막) |
 
 > **verify-clusters.sh 체크 항목**: 전 클러스터 노드 Ready / 전 Pod Running(또는 Completed) / Managed Cilium HubbleRelay Ready / Flux GitRepository/Kustomization Reconciled / Istio istiod Ready (mgmt·app1) / Kyverno admission webhook Ready (app1·app2) / ESO ClusterSecretStore Ready / Reloader Deployment Ready / Key Vault에 TLS 인증서 동기화 확인
@@ -1279,9 +1280,9 @@ resource "azurerm_data_protection_backup_vault" "bv" {
 | Defender for Containers | AKS 자동 관리 | AKS 자동 관리 | ✅ |
 | AKS Backup Extension | AKS 자동 관리 | AKS 자동 관리 | ✅ |
 | Container Insights | AKS 자동 관리 | AKS 자동 관리 | ✅ |
-| Cilium Tetragon | **v1.4.0** | Helm 수동 설치 | ✅ |
-| OpenTelemetry Collector | **v0.116.0** | Helm 수동 설치 | ✅ |
-| VPA (Fairwinds) | **v4.7.1** | Helm 수동 설치 | ✅ |
+| Cilium Tetragon | **v1.6.0** | Helm 수동 설치 | ✅ |
+| OpenTelemetry Collector | **v0.146.1** | Helm 수동 설치 | ✅ |
+| VPA (Fairwinds) | **v4.10.1** | Helm 수동 설치 | ✅ |
 
 **Addon HA 설정 (Helm 설치 대상)**:
 
