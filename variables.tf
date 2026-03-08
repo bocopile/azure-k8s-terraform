@@ -362,6 +362,17 @@ variable "jumpbox_image_version" {
 # Addon 환경변수 — install.sh에 주입 (tofu apply 한 번으로 전체 배포)
 # ============================================================
 
+variable "enable_addon_install" {
+  description = <<-EOT
+    true  = tofu apply 완료 후 addons/install.sh를 자동 실행 (local-exec).
+            전제: tofu apply 실행 머신에 kubectl, helm, az, kubelogin 설치됨.
+    false = 애드온 설치 건너뜀 (수동으로 ./addons/install.sh 실행 필요).
+    재실행 트리거: 클러스터 재생성, install.sh 변경, addon_env 변경.
+  EOT
+  type        = bool
+  default     = false
+}
+
 variable "addon_env" {
   description = <<-EOT
     install.sh 실행 전 export할 환경변수 맵.
