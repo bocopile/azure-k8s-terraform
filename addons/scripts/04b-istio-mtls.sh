@@ -45,7 +45,7 @@ apiVersion: security.istio.io/v1
 kind: PeerAuthentication
 metadata:
   name: default
-  namespace: istio-system
+  namespace: aks-istio-system
 spec:
   mtls:
     mode: STRICT
@@ -60,7 +60,7 @@ apiVersion: networking.istio.io/v1
 kind: DestinationRule
 metadata:
   name: default
-  namespace: istio-system
+  namespace: aks-istio-system
 spec:
   host: "*.local"
   trafficPolicy:

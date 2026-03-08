@@ -26,11 +26,12 @@ helm upgrade --install reloader stakater/reloader \
   --create-namespace \
   --version "${RELOADER_VERSION}" \
   --set reloader.deployment.replicas=2 \
+  --set reloader.enableHA=true \
   --set reloader.deployment.priorityClassName=platform-critical \
   --set reloader.deployment.resources.requests.cpu=25m \
   --set reloader.deployment.resources.requests.memory=32Mi \
-  --set reloader.deployment.resources.limits.cpu=100m \
-  --set reloader.deployment.resources.limits.memory=64Mi \
+  --set reloader.deployment.resources.limits.cpu=200m \
+  --set reloader.deployment.resources.limits.memory=128Mi \
   --wait --timeout 10m
 
 # PDB

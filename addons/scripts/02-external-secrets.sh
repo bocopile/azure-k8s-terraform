@@ -58,7 +58,7 @@ helm upgrade --install external-secrets external-secrets/external-secrets \
   --set certController.resources.limits.cpu=100m \
   --set certController.resources.limits.memory=128Mi \
   ${ESO_MI_CLIENT_ID:+--set "serviceAccount.annotations.azure\.workload\.identity/client-id=${ESO_MI_CLIENT_ID}"} \
-  ${ESO_MI_CLIENT_ID:+--set "podLabels.azure\.workload\.identity/use=true"} \
+  ${ESO_MI_CLIENT_ID:+--set-string "podLabels.azure\.workload\.identity/use=true"} \
   --wait --timeout 10m
 
 # HPA — ESO controller
@@ -107,7 +107,7 @@ kubectl -n "${NAMESPACE}" wait --for=condition=Available deployment/external-sec
 
 # ClusterSecretStore — Azure Key Vault + Workload Identity
 cat <<EOF | kubectl apply -f -
-apiVersion: external-secrets.io/v1beta1
+apiVersion: external-secrets.io/v1
 kind: ClusterSecretStore
 metadata:
   name: azure-keyvault
@@ -131,7 +131,7 @@ echo "[eso] ✓ ClusterSecretStore 'azure-keyvault' created on ${CLUSTER}"
 echo "[eso] ExternalSecret 사용 예시 (직접 apply 필요):"
 cat <<'EOF'
 ---
-apiVersion: external-secrets.io/v1beta1
+apiVersion: external-secrets.io/v1
 kind: ExternalSecret
 metadata:
   name: my-secret

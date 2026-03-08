@@ -19,11 +19,11 @@ CLUSTER_NAME="aks-${CLUSTER}"
 az aks get-credentials --resource-group "${RG}" \
   --name "${CLUSTER_NAME}" --overwrite-existing --only-show-errors
 
-# AKS Managed Cilium에서 Hubble 활성화
+# AKS Managed Cilium에서 Hubble 활성화 (ACNS - Advanced Container Networking Services)
 az aks update \
   --resource-group "${RG}" \
   --name "${CLUSTER_NAME}" \
-  --enable-cilium-observability
+  --enable-acns
 
 echo "[hubble] ✓ Hubble enabled on ${CLUSTER}"
 echo "[hubble] Hubble UI 접근 방법 (Jump VM에서):"

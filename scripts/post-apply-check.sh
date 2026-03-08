@@ -47,7 +47,9 @@ RG_COMMON="rg-${PREFIX}-common"
 CLUSTERS=("mgmt" "app1" "app2")
 CLUSTERS_WITH_INGRESS=("mgmt" "app1")
 LOCATION="koreacentral"
-LOG_FILE="${ROOT_DIR}/post-apply-check-$(date +%Y%m%d-%H%M%S).log"
+LOG_DIR="${ROOT_DIR}/logs/post-apply-check"
+mkdir -p "${LOG_DIR}"
+LOG_FILE="${LOG_DIR}/$(date +%Y%m%d-%H%M%S).log"
 
 echo "============================================================"
 echo " post-apply-check.sh — $(date '+%Y-%m-%d %H:%M:%S')"

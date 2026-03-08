@@ -220,9 +220,11 @@ if [[ "${CLUSTER_TARGET}" == "all" ]]; then
   run "${SCRIPTS_DIR}/11-budget-alert.sh"
 fi
 
-# --- Step 12: AKS Stop/Start Automation (STUB — 미구현) ---
+# --- Step 12: AKS Stop/Start Automation ---
+# GitHub Actions 워크플로우로 구현됨: .github/workflows/aks-schedule.yml
+# install.sh 단계에서는 워크플로우 존재 여부만 안내
 if [[ "${CLUSTER_TARGET}" == "all" ]]; then
-  log "--- [12] AKS Stop/Start Automation (STUB — skipping, see 12-aks-automation.sh) ---"
+  log "--- [12] AKS Stop/Start Automation: .github/workflows/aks-schedule.yml 참조 ---"
 fi
 
 # --- Step 13: Cilium Hubble UI (전체) ---

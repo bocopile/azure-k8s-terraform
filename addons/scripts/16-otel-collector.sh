@@ -33,18 +33,67 @@ if [[ -z "${APPINSIGHTS_CS}" ]]; then
   exit 1
 fi
 
-# Namespace + Secret 생성
+# Namespace 생성
 kubectl create namespace "${NAMESPACE}" --dry-run=client -o yaml | kubectl apply -f -
-kubectl create secret generic otel-appinsights \
-  --namespace "${NAMESPACE}" \
-  --from-literal=connection-string="${APPINSIGHTS_CS}" \
-  --dry-run=client -o yaml | kubectl apply -f -
-# TODO: Migrate to ExternalSecret resource referencing Key Vault (02-external-secrets.sh)
+
+# App Insights Connection String → Key Vault 저장 후 ExternalSecret으로 동기화
+# 전제: 02-external-secrets.sh 실행 완료 + ClusterSecretStore 'azure-keyvault' 존재
+KV_SECRET_NAME="otel-appinsights-connection-string"
+
+# Key Vault에 시크릿 저장 (없는 경우에만)
+KV_NAME=$(az keyvault list --resource-group "rg-${PREFIX:-k8s}-common" \
+  --query "[0].name" -o tsv 2>/dev/null || echo "")
+
+if [[ -n "${KV_NAME}" ]]; then
+  if ! az keyvault secret show --vault-name "${KV_NAME}" --name "${KV_SECRET_NAME}" \
+      --output none 2>/dev/null; then
+    echo "[otel] Key Vault '${KV_NAME}'에 시크릿 저장: ${KV_SECRET_NAME}"
+    az keyvault secret set --vault-name "${KV_NAME}" \
+      --name "${KV_SECRET_NAME}" \
+      --value "${APPINSIGHTS_CS}" --output none
+  else
+    echo "[otel] Key Vault 시크릿 이미 존재: ${KV_SECRET_NAME}"
+  fi
+
+  # ExternalSecret — Key Vault → K8s Secret 동기화
+  cat <<EOF | kubectl apply -f -
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: otel-appinsights
+  namespace: ${NAMESPACE}
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    name: azure-keyvault
+    kind: ClusterSecretStore
+  target:
+    name: otel-appinsights
+    creationPolicy: Owner
+  data:
+    - secretKey: connection-string
+      remoteRef:
+        key: ${KV_SECRET_NAME}
+EOF
+  echo "[otel] ExternalSecret 생성 완료 — Key Vault → otel-appinsights"
+  # ExternalSecret 동기화 대기
+  kubectl -n "${NAMESPACE}" wait --for=condition=Ready \
+    externalsecret/otel-appinsights --timeout=60s 2>/dev/null || \
+    echo "[otel][WARN] ExternalSecret 동기화 대기 타임아웃 — 수동 확인 필요"
+else
+  # Key Vault 없는 경우 fallback: 직접 시크릿 생성
+  echo "[otel][WARN] Key Vault 조회 실패 — kubectl secret으로 fallback"
+  kubectl create secret generic otel-appinsights \
+    --namespace "${NAMESPACE}" \
+    --from-literal=connection-string="${APPINSIGHTS_CS}" \
+    --dry-run=client -o yaml | kubectl apply -f -
+fi
 
 helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm-charts --force-update
 helm upgrade --install otel-collector open-telemetry/opentelemetry-collector \
   --namespace "${NAMESPACE}" \
   --version "${OTEL_CHART_VERSION}" \
+  --set image.repository=otel/opentelemetry-collector-contrib \
   --set mode=deployment \
   --set replicaCount=2 \
   --set resources.requests.cpu=50m \

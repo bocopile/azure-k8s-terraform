@@ -24,6 +24,10 @@ metadata:
 spec:
   template:
     spec:
+      nodeClassRef:
+        group: karpenter.azure.com
+        kind: AKSNodeClass
+        name: default
       requirements:
         - key: karpenter.azure.com/sku-family
           operator: In

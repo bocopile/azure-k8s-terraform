@@ -31,6 +31,21 @@ if [[ -z "${CERT_MANAGER_CLIENT_ID:-}" ]]; then
     echo "[cert-manager] CERT_MANAGER_CLIENT_ID 자동 조회: ${CERT_MANAGER_CLIENT_ID}"
 fi
 
+# admissionsenforcer 충돌 방지: 기존 ValidatingWebhookConfiguration 제거 후 재설치
+# AKS admissionsenforcer가 cert-manager-webhook 소유권을 가져가는 경우 --force가 서버사이드 어플라이와 충돌함
+if helm status cert-manager -n "${NAMESPACE}" &>/dev/null; then
+  echo "[cert-manager] 기존 release 발견 — webhook/CRD 정리 후 재설치"
+  kubectl delete validatingwebhookconfiguration cert-manager-webhook 2>/dev/null || true
+  kubectl delete mutatingwebhookconfiguration cert-manager-webhook 2>/dev/null || true
+  helm uninstall cert-manager -n "${NAMESPACE}" --wait 2>/dev/null || true
+  # CRD managedFields 충돌 방지: 기존 CRD 제거
+  kubectl delete crd \
+    challenges.acme.cert-manager.io orders.acme.cert-manager.io \
+    certificaterequests.cert-manager.io certificates.cert-manager.io \
+    clusterissuers.cert-manager.io issuers.cert-manager.io \
+    2>/dev/null || true
+fi
+
 helm repo add jetstack https://charts.jetstack.io --force-update
 helm upgrade --install cert-manager jetstack/cert-manager \
   --namespace "${NAMESPACE}" \
@@ -60,7 +75,7 @@ helm upgrade --install cert-manager jetstack/cert-manager \
   --set cainjector.resources.limits.cpu=100m \
   --set cainjector.resources.limits.memory=128Mi \
   ${CERT_MANAGER_CLIENT_ID:+--set "serviceAccount.annotations.azure\.workload\.identity/client-id=${CERT_MANAGER_CLIENT_ID}"} \
-  ${CERT_MANAGER_CLIENT_ID:+--set "podLabels.azure\.workload\.identity/use=true"} \
+  ${CERT_MANAGER_CLIENT_ID:+--set-string "podLabels.azure\.workload\.identity/use=true"} \
   --wait --timeout 10m
 
 # Workload Identity 구성 확인

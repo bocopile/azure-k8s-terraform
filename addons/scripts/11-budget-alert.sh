@@ -9,11 +9,17 @@
 # ============================================================
 set -euo pipefail
 
-echo "[budget] Creating Azure Budget Alert ($250/month)"
+echo "[budget] Creating Azure Budget Alert (\$250/month)"
 
 SUBSCRIPTION_ID="${AZURE_SUBSCRIPTION_ID:?Set AZURE_SUBSCRIPTION_ID env var}"
 BUDGET_NAME="budget-${PREFIX:-k8s}"
-ALERT_EMAIL="${BUDGET_ALERT_EMAIL:?Set BUDGET_ALERT_EMAIL env var}"
+
+if [[ -z "${BUDGET_ALERT_EMAIL:-}" ]]; then
+  echo "[budget] BUDGET_ALERT_EMAIL 미설정 — Budget Alert 건너뜀"
+  echo "[budget] 설정 방법: export BUDGET_ALERT_EMAIL=admin@example.com"
+  exit 0
+fi
+ALERT_EMAIL="${BUDGET_ALERT_EMAIL}"
 AMOUNT=250
 
 # Create budget via Azure CLI
@@ -42,3 +48,4 @@ az consumption budget create \
 
 echo "[budget] ✓ Budget '${BUDGET_NAME}' created: \$${AMOUNT}/month"
 echo "[budget] Alerts at 80% (\$200) and 100% (\$250) → ${ALERT_EMAIL}"
+
