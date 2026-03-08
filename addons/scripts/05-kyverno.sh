@@ -26,6 +26,17 @@ NAMESPACE="kyverno"
 az aks get-credentials --resource-group "rg-${PREFIX:-k8s}-${CLUSTER}" \
   --name "aks-${CLUSTER}" --overwrite-existing --only-show-errors
 
+# ── containerd zombie 컨테이너 복구 ──────────────────────────────
+# CNI 장애로 불완전 종료된 컨테이너가 "failed to reserve container name" 오류를 일으킴
+# 재설치 전에 Terminating / CreateContainerError Pod를 강제 제거해 containerd 상태를 초기화
+if kubectl get namespace "${NAMESPACE}" &>/dev/null 2>&1; then
+  echo "[kyverno] Cleaning up zombie/stuck pods before install..."
+  kubectl get pods -n "${NAMESPACE}" --no-headers 2>/dev/null \
+    | awk '$3=="Terminating" || $3=="CreateContainerError" {print $1}' \
+    | xargs -r kubectl delete pod -n "${NAMESPACE}" --force --grace-period=0 2>/dev/null || true
+  sleep 5
+fi
+
 helm repo add kyverno https://kyverno.github.io/kyverno --force-update
 helm upgrade --install kyverno kyverno/kyverno \
   --namespace "${NAMESPACE}" \
@@ -56,7 +67,8 @@ helm upgrade --install kyverno kyverno/kyverno \
   --set reportsController.resources.requests.memory=64Mi \
   --set reportsController.resources.limits.cpu=200m \
   --set reportsController.resources.limits.memory=128Mi \
-  --wait --timeout 10m
+  --set global.image.registry=ghcr.io \
+  --wait --timeout 15m
 
 # PDB — admission controller (가장 중요: webhook 가용성)
 cat <<EOF | kubectl apply -f -
