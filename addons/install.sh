@@ -4,6 +4,7 @@
 # Run AFTER `tofu apply` completes successfully.
 #
 # 실행 순서 (ARCHITECTURE.md §12 설치 워크플로우):
+#   13  hubble            — Cilium ACNS/Hubble (전체) ★ 반드시 먼저: ACNS가 Cilium 재시작 유발
 #   00  priority-classes  — 스케줄링 우선순위 사전 정의
 #   00b gateway-api       — Gateway API CRD (Istio GA 대비)
 #   01  cert-manager      — TLS 인증서 관리 (mgmt only)
@@ -19,7 +20,6 @@
 #   10  defender          — Defender for Containers 검증 (전체)
 #   11  budget-alert      — $250/월 예산 알림
 #   12  aks-automation    — AKS Stop/Start 자동화
-#   13  hubble            — Cilium Hubble UI (전체)
 #   15  tetragon          — Cilium Tetragon 런타임 보안 (전체)
 #   16  otel-collector    — OpenTelemetry Collector (전체)
 #   17  grafana-dashboards— Azure Managed Grafana 대시보드 프로비저닝
@@ -118,7 +118,17 @@ log "Location: ${LOCATION}"
 log "Dry run: ${DRY_RUN}"
 echo ""
 
-# --- Step 00: PriorityClass (전체 — 가장 먼저) ---
+# --- Step 13: Cilium Hubble / ACNS (전체 — 반드시 가장 먼저) ---
+# ⚠️  ACNS(az aks update --enable-acns)는 Cilium agent를 재시작시킵니다.
+#     이 단계를 모든 addon 설치 전에 완료해야 이후 Pod들이 CNI 오류 없이 IP를 받을 수 있습니다.
+for cluster in mgmt app1 app2; do
+  if [[ "${CLUSTER_TARGET}" == "all" || "${CLUSTER_TARGET}" == "${cluster}" ]]; then
+    log "--- [13] Enabling Cilium Hubble (ACNS) on ${cluster} — must run first ---"
+    run "${SCRIPTS_DIR}/13-hubble.sh" "${cluster}"
+  fi
+done
+
+# --- Step 00: PriorityClass (전체) ---
 for cluster in mgmt app1 app2; do
   if [[ "${CLUSTER_TARGET}" == "all" || "${CLUSTER_TARGET}" == "${cluster}" ]]; then
     log "--- [00] Installing PriorityClasses on ${cluster} ---"
@@ -227,13 +237,7 @@ if [[ "${CLUSTER_TARGET}" == "all" ]]; then
   log "--- [12] AKS Stop/Start Automation: .github/workflows/aks-schedule.yml 참조 ---"
 fi
 
-# --- Step 13: Cilium Hubble UI (전체) ---
-for cluster in mgmt app1 app2; do
-  if [[ "${CLUSTER_TARGET}" == "all" || "${CLUSTER_TARGET}" == "${cluster}" ]]; then
-    log "--- [13] Enabling Cilium Hubble on ${cluster} ---"
-    run "${SCRIPTS_DIR}/13-hubble.sh" "${cluster}"
-  fi
-done
+# Step 13: 상단으로 이동됨 (ACNS/Cilium 안정화 필수)
 
 # --- Step 15: Cilium Tetragon 런타임 보안 (전체) ---
 for cluster in mgmt app1 app2; do
