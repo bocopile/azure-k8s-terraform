@@ -181,9 +181,9 @@ if layer_enabled "L1"; then
 
   section "Jumpbox & Bastion"
   az vm show -g "${RG_MGMT}" -n "vm-jumpbox" --output none 2>/dev/null \
-    && ok "VM: vm-jumpbox" || fail "VM: vm-jumpbox (없음)"
+    && ok "VM: vm-jumpbox" || warn "VM: vm-jumpbox (없음 — enable_jumpbox=false이면 정상)"
   az network bastion show -g "${RG_MGMT}" -n "bastion-${PREFIX}" --output none 2>/dev/null \
-    && ok "Bastion: bastion-${PREFIX}" || fail "Bastion: bastion-${PREFIX} (없음)"
+    && ok "Bastion: bastion-${PREFIX}" || warn "Bastion: bastion-${PREFIX} (없음 — enable_jumpbox=false이면 정상)"
 
   section "Backup"
   az dataprotection backup-vault show -g "${RG_COMMON}" --vault-name "bv-${PREFIX}" --output none 2>/dev/null \
@@ -213,19 +213,21 @@ if layer_enabled "L2"; then
 
   section "Private DNS Zone — AKS"
   dns_zone="privatelink.${LOCATION}.azmk8s.io"
-  az network private-dns zone show -g "${RG_COMMON}" -n "${dns_zone}" --output none 2>/dev/null \
-    && ok "AKS Private DNS Zone: ${dns_zone}" \
-    || fail "AKS Private DNS Zone: ${dns_zone} (없음)"
-
-  # AKS Private DNS Zone → 각 VNet 링크 확인
-  for vnet in mgmt app1 app2; do
-    link_count=$(az network private-dns link vnet list \
-      -g "${RG_COMMON}" --zone-name "${dns_zone}" \
-      --query "[?contains(name, '${vnet}')].provisioningState" -o tsv 2>/dev/null | wc -l | tr -d ' ')
-    [[ "${link_count}" -gt 0 ]] \
-      && ok "  DNS Zone Link: ${dns_zone} → vnet-${vnet}" \
-      || warn "  DNS Zone Link: ${dns_zone} → vnet-${vnet} (없음)"
-  done
+  if az network private-dns zone show -g "${RG_COMMON}" -n "${dns_zone}" --output none 2>/dev/null; then
+    ok "AKS Private DNS Zone: ${dns_zone}"
+    # VNet 링크 확인
+    for vnet in mgmt app1 app2; do
+      link_count=$(az network private-dns link vnet list \
+        -g "${RG_COMMON}" --zone-name "${dns_zone}" \
+        --query "[?contains(name, '${vnet}')].provisioningState" -o tsv 2>/dev/null | wc -l | tr -d ' ') || link_count=0
+      [[ "${link_count}" -gt 0 ]] \
+        && ok "  DNS Zone Link: ${dns_zone} → vnet-${vnet}" \
+        || warn "  DNS Zone Link: ${dns_zone} → vnet-${vnet} (없음)"
+    done
+  else
+    # Authorized IP 모드 클러스터는 AKS Private DNS Zone 없음 (정상)
+    warn "AKS Private DNS Zone: ${dns_zone} (없음 — Authorized IP 모드이면 정상)"
+  fi
 
   section "Private DNS Zone — Key Vault"
   az network private-dns zone show -g "${RG_COMMON}" -n "privatelink.vaultcore.azure.net" --output none 2>/dev/null \
@@ -384,7 +386,7 @@ if layer_enabled "L4"; then
       || warn "Kiali Operator: 없음 (07-kiali.sh 실행 필요)"
 
     kiali_cr=$(aks_invoke "${rg}" "${aks}" \
-      "kubectl get kiali -n istio-system 2>/dev/null | grep -c kiali || echo 0")
+      "kubectl get kiali -n kiali-operator 2>/dev/null | grep -c kiali || echo 0")
     kiali_cr="${kiali_cr//[^0-9]/}"
     [[ "${kiali_cr:-0}" -gt 0 ]] \
       && ok "Kiali CR: 존재" \
@@ -405,7 +407,7 @@ if layer_enabled "L4"; then
       || warn "NAP/Karpenter: ${aks} mode=${nap_mode}"
 
     nodepool_count=$(aks_invoke "${rg}" "${aks}" \
-      "kubectl get nodepools.karpenter.sh 2>/dev/null | grep -vc NAME || echo 0")
+      "kubectl get nodepools.karpenter.sh --no-headers 2>/dev/null | grep -c . || echo 0")
     nodepool_count="${nodepool_count//[^0-9]/}"
     [[ "${nodepool_count:-0}" -gt 0 ]] \
       && ok "Karpenter NodePool: ${nodepool_count}개 (${aks})" \
@@ -418,7 +420,7 @@ if layer_enabled "L4"; then
     rg="rg-${PREFIX}-${cluster}"; aks="aks-${cluster}"
     if ! az aks show -g "${rg}" -n "${aks}" --output none 2>/dev/null; then continue; fi
     eso_pods=$(aks_invoke "${rg}" "${aks}" \
-      "kubectl get pods -n external-secrets -l app.kubernetes.io/name=external-secrets --no-headers 2>/dev/null | grep -c Running || echo 0")
+      "kubectl get pods -n external-secrets --no-headers 2>/dev/null | grep -c Running || echo 0")
     eso_pods="${eso_pods//[^0-9]/}"
     [[ "${eso_pods:-0}" -gt 0 ]] \
       && ok "ESO: Running on ${aks}" \
@@ -433,8 +435,8 @@ if layer_enabled "L4"; then
     flux_state=$(az k8s-extension show \
       -g "${rg}" -c "aks-${cluster}" \
       --cluster-type managedClusters -n flux \
-      --query "installState" -o tsv 2>/dev/null || echo "NotInstalled")
-    [[ "${flux_state}" == "Installed" ]] \
+      --query "provisioningState" -o tsv 2>/dev/null || echo "NotInstalled")
+    [[ "${flux_state}" == "Succeeded" ]] \
       && ok "Flux: ${aks} (${flux_state})" \
       || warn "Flux Extension: ${aks} (${flux_state})"
   done
@@ -464,7 +466,7 @@ if layer_enabled "L5"; then
     fi
 
     dr_output=$(aks_invoke "${rg}" "${aks}" \
-      "kubectl get destinationrule -A --no-headers 2>/dev/null | grep -c ISTIO_MUTUAL || echo 0")
+      "kubectl get destinationrule -A -o jsonpath='{range .items[*]}{.spec.trafficPolicy.tls.mode}{\"\\n\"}{end}' 2>/dev/null | grep -c ISTIO_MUTUAL || echo 0")
     dr_count="${dr_output//[^0-9]/}"
     [[ "${dr_count:-0}" -gt 0 ]] \
       && ok "DestinationRule ISTIO_MUTUAL: ${dr_count}개 (${aks})" \

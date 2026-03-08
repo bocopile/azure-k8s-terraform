@@ -74,13 +74,20 @@ enable_grafana     = false    # Grafana 비용 절약. 필요 시 true + grafana
 
 # ============================================================
 # Addon 자동 설치 설정 (tofu apply 한 번으로 전체 배포)
-# addon_repo_url를 설정하면 jumpbox가 자동으로 install.sh를 실행합니다.
+#
+# [방법 A] enable_addon_install = true (권장, Jumpbox 없을 때)
+#   tofu apply 실행 머신에서 직접 install.sh를 실행합니다.
+#   전제: kubectl, helm, az, kubelogin 설치됨 + az login 완료.
+#
+# [방법 B] addon_repo_url 설정 (Jumpbox 사용 시)
+#   Jumpbox VM cloud-init에서 install.sh를 자동으로 실행합니다.
+#   enable_jumpbox = true 필요.
 # ============================================================
 
-# Git 레포 URL (이 프로젝트 자체 또는 fork URL)
-# addon_repo_url = "https://github.com/your-org/azure-k8s-terraform.git"
+# [방법 A] 로컬 실행 (enable_jumpbox = false 환경 — 권장)
+# enable_addon_install = true
 
-# addon 스크립트에 주입할 환경변수
+# addon 스크립트에 주입할 환경변수 (방법 A/B 공통)
 # addon_env = {
 #   # cert-manager ClusterIssuer (필수)
 #   LETSENCRYPT_EMAIL      = "admin@example.com"
@@ -92,21 +99,27 @@ enable_grafana     = false    # Grafana 비용 절약. 필요 시 true + grafana
 #   DNS_ZONE_RG            = "rg-dns"
 #   CERT_MANAGER_CLIENT_ID = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
 #
-#   # Flux GitOps (필수, addon_repo_url 설정 시)
-#   GITOPS_REPO_URL  = "ssh://git@github.com/your-org/gitops-repo.git"
-#   GITOPS_BRANCH    = "main"
-#   GITOPS_PATH      = "clusters"
+#   # Flux GitOps
+#   GITOPS_REPO_URL        = "ssh://git@github.com/your-org/gitops-repo.git"
+#   GITOPS_BRANCH          = "main"
+#   GITOPS_PATH            = "clusters"
+#
+#   # Budget Alert
+#   BUDGET_ALERT_EMAIL     = "admin@example.com"
 #
 #   # Kiali (선택)
-#   PROMETHEUS_URL   = ""
-#   GRAFANA_URL      = ""
-#   GRAFANA_ENABLED  = "false"
+#   PROMETHEUS_URL         = ""
+#   GRAFANA_URL            = ""
+#   GRAFANA_ENABLED        = "false"
 # }
 
 # Flux SSH Deploy Key (private key 전체 내용, Key Vault에 안전하게 저장됨)
 # 생성: ssh-keygen -t ed25519 -C flux-deploy -f ~/.ssh/flux-deploy-key -N ''
 # 공개키(flux-deploy-key.pub)를 GitHub/GitLab Deploy Key로 등록 후 설정
 # flux_ssh_private_key = file("~/.ssh/flux-deploy-key")
+
+# [방법 B] Jumpbox 경유 자동 설치 (enable_jumpbox = true 환경)
+# addon_repo_url = "https://github.com/your-org/azure-k8s-terraform.git"
 
 # 리소스 태그
 tags = {

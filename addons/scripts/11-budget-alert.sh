@@ -22,29 +22,40 @@ fi
 ALERT_EMAIL="${BUDGET_ALERT_EMAIL}"
 AMOUNT=250
 
-# Create budget via Azure CLI
-az consumption budget create \
-  --budget-name "${BUDGET_NAME}" \
-  --amount "${AMOUNT}" \
-  --time-grain Monthly \
-  --category Cost \
-  --subscription "${SUBSCRIPTION_ID}" \
-  --notifications "[
-    {
-      \"enabled\": true,
-      \"operator\": \"GreaterThan\",
-      \"threshold\": 80,
-      \"contactEmails\": [\"${ALERT_EMAIL}\"],
-      \"thresholdType\": \"Actual\"
-    },
-    {
-      \"enabled\": true,
-      \"operator\": \"GreaterThan\",
-      \"threshold\": 100,
-      \"contactEmails\": [\"${ALERT_EMAIL}\"],
-      \"thresholdType\": \"Actual\"
+# 예산 기간: 이번 달 1일 ~ 5년 후
+START_DATE="$(date +%Y-%m)-01"
+END_DATE="$(date -v+5y +%Y-%m)-01"
+
+# ARM REST API로 알림 포함 예산 생성 (az consumption budget create는 알림 미지원)
+az rest --method PUT \
+  --url "https://management.azure.com/subscriptions/${SUBSCRIPTION_ID}/providers/Microsoft.Consumption/budgets/${BUDGET_NAME}?api-version=2023-11-01" \
+  --body "{
+    \"properties\": {
+      \"category\": \"Cost\",
+      \"amount\": ${AMOUNT},
+      \"timeGrain\": \"Monthly\",
+      \"timePeriod\": {
+        \"startDate\": \"${START_DATE}\",
+        \"endDate\": \"${END_DATE}\"
+      },
+      \"notifications\": {
+        \"alert80\": {
+          \"enabled\": true,
+          \"operator\": \"GreaterThan\",
+          \"threshold\": 80,
+          \"contactEmails\": [\"${ALERT_EMAIL}\"],
+          \"thresholdType\": \"Actual\"
+        },
+        \"alert100\": {
+          \"enabled\": true,
+          \"operator\": \"GreaterThan\",
+          \"threshold\": 100,
+          \"contactEmails\": [\"${ALERT_EMAIL}\"],
+          \"thresholdType\": \"Actual\"
+        }
+      }
     }
-  ]"
+  }" 2>&1
 
 echo "[budget] ✓ Budget '${BUDGET_NAME}' created: \$${AMOUNT}/month"
 echo "[budget] Alerts at 80% (\$200) and 100% (\$250) → ${ALERT_EMAIL}"

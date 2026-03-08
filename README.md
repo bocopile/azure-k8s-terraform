@@ -1,7 +1,7 @@
 # Azure Kubernetes 멀티클러스터 IaC
 
 > **OpenTofu** 기반 Azure AKS 멀티클러스터 인프라 코드 (Korea Central)
-> 아키텍처 문서: [`document/azure/ARCHITECTURE.md`](document/azure/ARCHITECTURE.md) v3.2.0
+> 아키텍처 문서: [`document/azure/ARCHITECTURE.md`](document/azure/ARCHITECTURE.md) v3.3.0
 
 ---
 
@@ -31,17 +31,19 @@ Azure 관리형 서비스를 최대한 활용하고, Spot VM + NAP(Karpenter)으
                          ┌─────────────────────────────────┐
                          │        Korea Central             │
                          │                                  │
-    Internet ──────────► │  Azure Bastion (Basic)           │
-                         │       │                          │
-                         │  Jump VM (mgmt VNet)             │
-                         │       │                          │
-                         │  ┌────┴───────────────────────┐  │
+    Internet ──────────► │  Authorized IP Ranges            │
+    (로컬 공인 IP)        │  (kubectl 직접 접근)             │
+                         │                                  │
+                         │  ※ enable_jumpbox=true 시        │
+                         │    Bastion + Jump VM 경유 전환   │
+                         │                                  │
+                         │  ┌────────────────────────────┐  │
                          │  │  VNet Full-Mesh Peering     │  │
                          │  │  mgmt ↔ app1 ↔ app2        │  │
                          │  └────────────────────────────┘  │
                          │                                  │
                          │  aks-mgmt   aks-app1   aks-app2  │
-                         │  (Private)  (Private)  (Private) │
+                         │  (Auth IP)  (Auth IP)  (Auth IP) │
                          └─────────────────────────────────┘
                                         │
                          ┌─────────────────────────────────┐
@@ -724,7 +726,7 @@ cd ~/azure-k8s-terraform
 | 09 | `09-backup-extension.sh` | AKS Backup 상태 확인 (Extension은 Terraform 관리) |
 | 10 | `10-defender.sh` | Defender for Containers 검증 |
 | 11 | `11-budget-alert.sh` | 예산 알림 ($250/월) |
-| 12 | `12-aks-automation.sh` | AKS Stop/Start 자동화 (STUB) |
+| 12 | `12-aks-automation.sh` | AKS Stop/Start 자동화 (GitHub Actions: `.github/workflows/aks-schedule.yml`) |
 | 13 | `13-hubble.sh` | Cilium Hubble UI + Relay |
 | 15 | `15-tetragon.sh` | Cilium Tetragon (eBPF 런타임 보안) |
 | 16 | `16-otel-collector.sh` | OpenTelemetry Collector |
@@ -807,13 +809,13 @@ tofu output phase2_command
 | Private Endpoint Subnet | 10.1.2.0/24 | Key Vault PE |
 
 **VNet 연결**: mgmt ↔ app1 ↔ app2 풀메시 피어링
-**Private DNS Zone**: `privatelink.koreacentral.azmk8s.io` 공유 (3개 VNet 링크) → Jump VM에서 모든 클러스터 API FQDN 해석 가능
+**Private DNS Zone**: `enable_jumpbox=true` (Private Cluster 모드) 시 `privatelink.koreacentral.azmk8s.io` 생성. 현재(Authorized IP 모드)는 해당 DNS Zone 없음 — 로컬 공인 IP로 직접 kubectl 접근
 
 ---
 
 ## 보안 설계
 
-- **접근 경로**: 인터넷 → Azure Bastion → Jump VM → Private AKS API Server
+- **접근 경로**: 인터넷 → Authorized IP Ranges → AKS API Server (로컬 kubectl 직접 접근), `enable_jumpbox=true` 시 Azure Bastion → Jump VM → Private AKS API Server로 전환
 - **인증**: Azure RBAC for Kubernetes (로컬 계정 비활성화)
 - **시크릿**: Key Vault Private Endpoint + CSI Driver + Workload Identity
 - **이미지 보안**: ACR + AcrPull (Kubelet Identity) — admin 계정 비활성화
