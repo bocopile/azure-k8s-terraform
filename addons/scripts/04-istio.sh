@@ -33,4 +33,12 @@ az aks mesh enable \
   --name "${CLUSTER_NAME}" \
   --revision "${REVISION}"
 
+# az aks mesh enable은 기본 블로킹이지만, istiod Pod가 완전히 Ready될 때까지 추가 대기
+# 04b-istio-mtls.sh가 곧바로 실행되므로 istiod 미준비 시 webhook 오류 발생 가능
+echo "[istio] Waiting for istiod to be ready..."
+kubectl rollout status deployment/istiod-"${REVISION}" \
+  -n aks-istio-system --timeout=10m 2>/dev/null || \
+  kubectl rollout status deployment/istiod \
+    -n aks-istio-system --timeout=10m
+
 echo "[istio] ✓ Istio ${REVISION} enabled on ${CLUSTER}"
